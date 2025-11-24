@@ -1,0 +1,43 @@
+# PriceRadar 핵심 설정
+
+# 데이터베이스 경로
+database:
+  path: "data/priceradar.duckdb"
+
+# 수집 설정
+collection:
+  user_agent: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
+  timeout: 30
+  retry_count: 3
+  delay_between_requests: 1.0
+
+# 스코어링 가중치
+scoring:
+  discount_strength: 0.4      # 할인 강도
+  timing_rarity: 0.3          # 가격 타이밍 희소성
+  popularity: 0.2             # 인기도/수요
+  volatility_penalty: 0.1     # 가격 안정성
+
+# 카테고리 설정
+categories:
+  - food
+  - living
+  - electronics
+  - beauty
+  - baby
+  - pet
+  - sports
+  - fashion
+
+# 최소 임계값
+thresholds:
+  min_discount_rate: 0.15     # 최소 할인율 15%
+  min_saving_amount: 3000     # 최소 절약금액 3,000원
+  min_price: 1000             # 최소 상품가격 1,000원
+  max_price: 10000000         # 최대 상품가격 10,000,000원
+
+# 리포팅 설정
+reporting:
+  max_items_per_category: 20
+  max_items_per_report: 100
+  output_path: "docs/reports"

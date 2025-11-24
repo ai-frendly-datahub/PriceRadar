@@ -1,0 +1,96 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PriceRadar - 일일 가격 리포트</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+            background: #f5f5f5;
+        }
+        .header {
+            background: white;
+            padding: 30px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        h1 {
+            color: #333;
+            margin: 0 0 10px 0;
+        }
+        .subtitle {
+            color: #666;
+            font-size: 16px;
+        }
+        .reports-container {
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        .report-list {
+            list-style: none;
+            padding: 0;
+            margin: 0;
+        }
+        .report-item {
+            border-bottom: 1px solid #eee;
+            padding: 15px 0;
+        }
+        .report-item:last-child {
+            border-bottom: none;
+        }
+        .report-date {
+            font-size: 18px;
+            font-weight: bold;
+            color: #007bff;
+            text-decoration: none;
+        }
+        .report-date:hover {
+            text-decoration: underline;
+        }
+        .report-meta {
+            color: #666;
+            font-size: 14px;
+            margin-top: 5px;
+        }
+        .badge {
+            display: inline-block;
+            padding: 4px 8px;
+            border-radius: 4px;
+            font-size: 12px;
+            background: #28a745;
+            color: white;
+            margin-left: 10px;
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>🎯 PriceRadar</h1>
+        <p class="subtitle">매일 업데이트되는 최저가 딜 리포트</p>
+    </div>
+
+    <div class="reports-container">
+        <h2>📊 일일 리포트</h2>
+        <ul class="report-list" id="reportList">
+            <li class="report-item">
+                <a href="2025-11-24/index.html" class="report-date">2025-11-24</a>
+                <span class="badge">최신</span>
+                <div class="report-meta">100개 상품 | 15개 카테고리 | 4개 플랫폼</div>
+            </li>
+        </ul>
+    </div>
+
+    <script>
+        // 자동으로 날짜별 리포트 목록 생성
+        // GitHub Pages에서는 디렉토리 목록을 가져올 수 없으므로
+        // 수동으로 업데이트하거나 별도 스크립트로 생성 필요
+    </script>
+</body>
+</html>

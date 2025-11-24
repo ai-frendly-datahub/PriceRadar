@@ -1,0 +1,299 @@
+"""
+HTML Reporter - Jinja2 기반 가격 레이다 리포트 생성
+"""
+
+import os
+from datetime import datetime
+from pathlib import Path
+from typing import Any
+
+from jinja2 import Environment, FileSystemLoader, select_autoescape
+
+
+class HtmlReporter:
+    """HTML 리포트 생성기"""
+
+    def __init__(self, template_dir: str = "priceradar/reporters/templates") -> None:
+        """
+        Args:
+            template_dir: Jinja2 템플릿 디렉터리
+        """
+        self.template_dir = template_dir
+
+        # Jinja2 환경 설정
+        if os.path.exists(template_dir):
+            self.env = Environment(
+                loader=FileSystemLoader(template_dir),
+                autoescape=select_autoescape(["html", "xml"]),
+            )
+        else:
+            # 템플릿 디렉터리가 없으면 기본 템플릿 사용
+            self.env = None
+
+    def generate_report(
+        self,
+        deals: list[dict[str, Any]],
+        output_path: str,
+        title: str = "PriceRadar 일일 리포트",
+    ) -> str:
+        """
+        가격 딜 리포트 HTML 생성
+
+        Args:
+            deals: 상위 딜 리스트 (get_top_deals 결과)
+            output_path: 출력 파일 경로
+            title: 리포트 제목
+
+        Returns:
+            생성된 HTML 파일 경로
+        """
+        # 출력 디렉터리 생성
+        os.makedirs(os.path.dirname(output_path), exist_ok=True)
+
+        # 템플릿이 없으면 기본 HTML 생성
+        if not self.env:
+            html_content = self._generate_basic_html(deals, title)
+        else:
+            template = self.env.get_template("report.html")
+            html_content = template.render(
+                title=title,
+                generated_at=datetime.now(),
+                deals=deals,
+                total_deals=len(deals),
+            )
+
+        # 파일 저장
+        with open(output_path, "w", encoding="utf-8") as f:
+            f.write(html_content)
+
+        return output_path
+
+    def _generate_basic_html(
+        self, deals: list[dict[str, Any]], title: str
+    ) -> str:
+        """기본 HTML 템플릿 (Jinja2 없이)"""
+        now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+
+        # 카테고리 및 플랫폼 목록 추출
+        categories = sorted(set(deal.get("category", "기타") for deal in deals))
+        platforms = sorted(set(deal.get("platform", "기타") for deal in deals if deal.get("platform")))
+
+        html_parts = [
+            "<!DOCTYPE html>",
+            '<html lang="ko">',
+            "<head>",
+            '    <meta charset="UTF-8">',
+            '    <meta name="viewport" content="width=device-width, initial-scale=1.0">',
+            f"    <title>{title}</title>",
+            "    <style>",
+            "        body { font-family: Arial, sans-serif; margin: 20px; background: #f5f5f5; }",
+            "        .container { max-width: 1200px; margin: 0 auto; background: white; padding: 20px; }",
+            "        h1 { color: #333; border-bottom: 3px solid #007bff; padding-bottom: 10px; }",
+            "        .meta { color: #666; margin-bottom: 20px; }",
+            "        .filters { background: #e9ecef; padding: 15px; border-radius: 8px; margin-bottom: 20px; }",
+            "        .filters label { font-weight: bold; margin-right: 10px; }",
+            "        .filters select { padding: 8px; border-radius: 4px; border: 1px solid #ccc; margin-right: 20px; min-width: 150px; }",
+            "        .filters button { padding: 8px 16px; background: #007bff; color: white; border: none; border-radius: 4px; cursor: pointer; }",
+            "        .filters button:hover { background: #0056b3; }",
+            "        .stats { display: flex; gap: 20px; margin-bottom: 20px; }",
+            "        .stat-box { flex: 1; background: #f8f9fa; padding: 15px; border-radius: 8px; text-align: center; }",
+            "        .stat-value { font-size: 24px; font-weight: bold; color: #007bff; }",
+            "        .stat-label { color: #666; font-size: 14px; margin-top: 5px; }",
+            "        .deal-card { border: 1px solid #ddd; border-radius: 8px; padding: 15px; margin-bottom: 15px; background: #fafafa; }",
+            "        .deal-card:hover { box-shadow: 0 2px 8px rgba(0,0,0,0.1); }",
+            "        .deal-card.hidden { display: none; }",
+            "        .deal-title { font-size: 18px; font-weight: bold; color: #222; margin-bottom: 8px; }",
+            "        .deal-price { font-size: 24px; color: #e74c3c; font-weight: bold; }",
+            "        .deal-meta { color: #666; font-size: 14px; margin-top: 8px; }",
+            "        .score-bar { height: 8px; background: #ddd; border-radius: 4px; overflow: hidden; margin-top: 10px; }",
+            "        .score-fill { height: 100%; background: linear-gradient(90deg, #28a745, #ffc107, #dc3545); }",
+            "        .explanation { color: #555; margin-top: 10px; font-style: italic; }",
+            "        .badge { display: inline-block; padding: 4px 8px; border-radius: 4px; font-size: 12px; margin-right: 5px; }",
+            "        .badge-category { background: #007bff; color: white; }",
+            "        .badge-platform { background: #6c757d; color: white; }",
+            "    </style>",
+            "</head>",
+            "<body>",
+            '    <div class="container">',
+            f"        <h1>{title}</h1>",
+            f'        <div class="meta">생성일시: {now} | 총 {len(deals)}개 딜</div>',
+            "",
+            "        <!-- 통계 -->",
+            '        <div class="stats">',
+            '            <div class="stat-box">',
+            f'                <div class="stat-value">{len(deals)}</div>',
+            '                <div class="stat-label">총 상품</div>',
+            "            </div>",
+            '            <div class="stat-box">',
+            f'                <div class="stat-value">{len(categories)}</div>',
+            '                <div class="stat-label">카테고리</div>',
+            "            </div>",
+            '            <div class="stat-box">',
+            f'                <div class="stat-value">{len(platforms)}</div>',
+            '                <div class="stat-label">플랫폼</div>',
+            "            </div>",
+            "        </div>",
+            "",
+            "        <!-- 필터 -->",
+            '        <div class="filters">',
+            '            <label for="categoryFilter">카테고리:</label>',
+            '            <select id="categoryFilter" onchange="filterDeals()">',
+            '                <option value="all">전체</option>',
+        ]
+
+        # 카테고리 옵션 추가
+        for cat in categories:
+            html_parts.append(f'                <option value="{cat}">{cat}</option>')
+
+        html_parts.extend([
+            "            </select>",
+            '            <label for="platformFilter">플랫폼:</label>',
+            '            <select id="platformFilter" onchange="filterDeals()">',
+            '                <option value="all">전체</option>',
+        ])
+
+        # 플랫폼 옵션 추가
+        for plat in platforms:
+            html_parts.append(f'                <option value="{plat}">{plat}</option>')
+
+        html_parts.extend([
+            "            </select>",
+            '            <label for="sortBy">정렬:</label>',
+            '            <select id="sortBy" onchange="sortDeals()">',
+            '                <option value="score">점수 높은순</option>',
+            '                <option value="price_low">가격 낮은순</option>',
+            '                <option value="price_high">가격 높은순</option>',
+            '                <option value="discount">할인율 높은순</option>',
+            "            </select>",
+            '            <button onclick="resetFilters()">초기화</button>',
+            "        </div>",
+            "",
+            '        <div id="dealsContainer">',
+        ])
+
+        # 딜 카드 생성
+        for idx, deal in enumerate(deals):
+            product_id = deal.get("product_id", "")
+            title_text = deal.get("title", "제목 없음")
+            url = deal.get("url", "#")
+            category = deal.get("category", "기타")
+            platform = deal.get("platform", "기타")
+            current_price = deal.get("current_price", 0)
+            avg_price = deal.get("avg_price")
+            saving_amount = deal.get("saving_amount")
+            radar_score = deal.get("radar_score", 0.0)
+            discount_rate = deal.get("discount_rate", 0.0)
+            explanation = deal.get("explanation", "")
+
+            # 점수 바 너비 계산
+            score_width = int(radar_score * 100)
+
+            html_parts.extend(
+                [
+                    f'        <div class="deal-card" data-category="{category}" data-platform="{platform}" data-price="{current_price}" data-score="{radar_score}" data-discount="{discount_rate}" data-index="{idx}">',
+                    f'            <div class="deal-title"><a href="{url}" target="_blank">{title_text}</a></div>',
+                ]
+            )
+
+            if category:
+                html_parts.append(
+                    f'            <span class="badge badge-category">{category}</span>'
+                )
+            if platform:
+                html_parts.append(
+                    f'            <span class="badge badge-platform">{platform}</span>'
+                )
+
+            html_parts.append(
+                f'            <div class="deal-price">{current_price:,}원</div>'
+            )
+
+            if avg_price and saving_amount:
+                html_parts.append(
+                    f'            <div class="deal-meta">평균가: {avg_price:,}원 | 절약: {saving_amount:,}원</div>'
+                )
+
+            html_parts.extend(
+                [
+                    f'            <div class="score-bar"><div class="score-fill" style="width: {score_width}%"></div></div>',
+                    f'            <div class="deal-meta">레이다 점수: {radar_score:.2f}',
+                ]
+            )
+
+            if discount_rate > 0:
+                html_parts.append(f' | 할인율: {int(discount_rate * 100)}%')
+
+            html_parts.append("</div>")
+
+            if explanation:
+                html_parts.append(
+                    f'            <div class="explanation">{explanation}</div>'
+                )
+
+            html_parts.append("        </div>")
+
+        html_parts.extend(
+            [
+                "        </div>",  # dealsContainer
+                "",
+                "        <!-- JavaScript -->",
+                "        <script>",
+                "            function filterDeals() {",
+                "                const categoryFilter = document.getElementById('categoryFilter').value;",
+                "                const platformFilter = document.getElementById('platformFilter').value;",
+                "                const cards = document.querySelectorAll('.deal-card');",
+                "",
+                "                let visibleCount = 0;",
+                "                cards.forEach(card => {",
+                "                    const category = card.dataset.category;",
+                "                    const platform = card.dataset.platform;",
+                "                    const matchCategory = categoryFilter === 'all' || category === categoryFilter;",
+                "                    const matchPlatform = platformFilter === 'all' || platform === platformFilter;",
+                "",
+                "                    if (matchCategory && matchPlatform) {",
+                "                        card.classList.remove('hidden');",
+                "                        visibleCount++;",
+                "                    } else {",
+                "                        card.classList.add('hidden');",
+                "                    }",
+                "                });",
+                "            }",
+                "",
+                "            function sortDeals() {",
+                "                const sortBy = document.getElementById('sortBy').value;",
+                "                const container = document.getElementById('dealsContainer');",
+                "                const cards = Array.from(document.querySelectorAll('.deal-card'));",
+                "",
+                "                cards.sort((a, b) => {",
+                "                    switch(sortBy) {",
+                "                        case 'score':",
+                "                            return parseFloat(b.dataset.score) - parseFloat(a.dataset.score);",
+                "                        case 'price_low':",
+                "                            return parseFloat(a.dataset.price) - parseFloat(b.dataset.price);",
+                "                        case 'price_high':",
+                "                            return parseFloat(b.dataset.price) - parseFloat(a.dataset.price);",
+                "                        case 'discount':",
+                "                            return parseFloat(b.dataset.discount) - parseFloat(a.dataset.discount);",
+                "                        default:",
+                "                            return parseFloat(a.dataset.index) - parseFloat(b.dataset.index);",
+                "                    }",
+                "                });",
+                "",
+                "                cards.forEach(card => container.appendChild(card));",
+                "            }",
+                "",
+                "            function resetFilters() {",
+                "                document.getElementById('categoryFilter').value = 'all';",
+                "                document.getElementById('platformFilter').value = 'all';",
+                "                document.getElementById('sortBy').value = 'score';",
+                "                filterDeals();",
+                "                sortDeals();",
+                "            }",
+                "        </script>",
+                "    </div>",
+                "</body>",
+                "</html>",
+            ]
+        )
+
+        return "\n".join(html_parts)
