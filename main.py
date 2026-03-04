@@ -10,36 +10,43 @@ PriceRadar 메인 실행 스크립트
 import argparse
 import os
 import time
+from dataclasses import asdict
 from datetime import datetime
 from pathlib import Path
+from typing import Any
 
 import yaml
 
 from priceradar.analyzers.price_scorer import PriceScorer
 from priceradar.collectors.registry import CollectorRegistry
+from priceradar.collectors.base import RawItem
 from priceradar.graph.graph_store import GraphStore
+from priceradar.raw_logger import RawLogger
 from priceradar.reporters.html_reporter import HtmlReporter
+from priceradar.search_index import SearchIndex
 
 
-def load_config(config_path: str = "config/config.yaml") -> dict:
+def load_config(config_path: str = "config/config.yaml") -> dict[str, Any]:
     """설정 파일 로드"""
     with open(config_path, "r", encoding="utf-8") as f:
         return yaml.safe_load(f)
 
 
-def load_sources(sources_path: str = "config/sources.yaml") -> dict:
+def load_sources(sources_path: str = "config/sources.yaml") -> dict[str, Any]:
     """소스 설정 파일 로드"""
     with open(sources_path, "r", encoding="utf-8") as f:
         return yaml.safe_load(f)
 
 
-def run_collection(config: dict, sources_config: dict) -> None:
+def run_collection(config: dict[str, Any], sources_config: dict[str, Any]) -> None:
     """데이터 수집 실행"""
     print("\n=== 데이터 수집 시작 ===")
     start_time = time.time()
 
     db_path = config["database"]["path"]
     store = GraphStore(db_path)
+    raw_logger = RawLogger(Path("data/raw"))
+    search_index = SearchIndex(Path(os.getenv("PRICERADAR_SEARCH_DB_PATH", "data/search_index.db")))
 
     total_items_collected = 0
     total_items_saved = 0
@@ -63,6 +70,8 @@ def run_collection(config: dict, sources_config: dict) -> None:
             items = collector.collect()
             total_items_collected += len(items)
 
+            raw_logger.log((_raw_item_to_record(item) for item in items), source_name=source_id)
+
             # 중복 제거 후 저장
             saved_count = 0
             for item in items:
@@ -71,6 +80,11 @@ def run_collection(config: dict, sources_config: dict) -> None:
                     continue
 
                 store.save_raw_item(item)
+                search_index.upsert(
+                    link=item.url,
+                    title=item.title,
+                    body=_build_search_body(item.platform, item.category, item.brand),
+                )
                 if item.url:
                     seen_urls.add(item.url)
                 saved_count += 1
@@ -90,7 +104,19 @@ def run_collection(config: dict, sources_config: dict) -> None:
     print(f"중복 제거: {duplicates_removed}개 (저장: {total_items_saved}개)")
 
 
-def run_scoring(config: dict) -> None:
+def _raw_item_to_record(item: RawItem) -> dict[str, Any]:
+    record = asdict(item)
+    collected_at = record.get("collected_at")
+    if isinstance(collected_at, datetime):
+        record["collected_at"] = collected_at.isoformat()
+    return record
+
+
+def _build_search_body(platform: str | None, category: str | None, brand: str | None) -> str:
+    return " ".join(part for part in [platform, category, brand] if part)
+
+
+def run_scoring(config: dict[str, Any]) -> None:
     """가격 스코어링 실행"""
     print("\n=== 가격 스코어링 시작 ===")
     start_time = time.time()
@@ -169,7 +195,7 @@ def run_scoring(config: dict) -> None:
     print(f"스코어링 완료: 총 {total_scored}개 상품 ({elapsed:.2f}초)")
 
 
-def generate_report(config: dict, output_dir: str = None) -> None:
+def generate_report(config: dict[str, Any], output_dir: str | None = None) -> None:
     """HTML 리포트 생성"""
     print("\n=== 리포트 생성 시작 ===")
 
@@ -184,7 +210,7 @@ def generate_report(config: dict, output_dir: str = None) -> None:
 
     # 리포트 생성
     if output_dir is None:
-        output_dir = config.get("reporting", {}).get("output_path", "docs/reports")
+        output_dir = str(config.get("reporting", {}).get("output_path", "docs/reports"))
 
     today = datetime.now().strftime("%Y-%m-%d")
     report_dir = os.path.join(output_dir, today)
@@ -204,7 +230,9 @@ def generate_report(config: dict, output_dir: str = None) -> None:
     print(f"리포트 생성 완료: {report_path}")
 
 
-def run_once(config: dict, sources_config: dict, generate_report_flag: bool = False) -> None:
+def run_once(
+    config: dict[str, Any], sources_config: dict[str, Any], generate_report_flag: bool = False
+) -> None:
     """1회 실행"""
     print("\n" + "=" * 60)
     print(f"PriceRadar 실행 시작: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
@@ -239,7 +267,9 @@ def run_once(config: dict, sources_config: dict, generate_report_flag: bool = Fa
     print("=" * 60 + "\n")
 
 
-def run_scheduler(config: dict, sources_config: dict, interval_hours: int = 24) -> None:
+def run_scheduler(
+    config: dict[str, Any], sources_config: dict[str, Any], interval_hours: int = 24
+) -> None:
     """주기적 실행"""
     print(f"스케줄러 시작 ({interval_hours}시간 간격)")
 
