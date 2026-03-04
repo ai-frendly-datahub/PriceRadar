@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 from datetime import datetime
+from pathlib import Path
+from typing import Any
 
 import pytest
 
@@ -9,8 +11,11 @@ from priceradar.collectors.base import RawItem
 
 
 @pytest.mark.unit
-def test_run_collection_logs_raw_records_and_syncs_search_index(monkeypatch, tmp_path) -> None:
-    captured: dict[str, object] = {"raw_logs": [], "upserts": []}
+def test_run_collection_logs_raw_records_and_syncs_search_index(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    raw_logs: list[tuple[str, list[dict[str, Any]]]] = []
+    upserts: list[tuple[str, str, str]] = []
 
     class FakeCollector:
         def collect(self) -> list[RawItem]:
@@ -30,7 +35,8 @@ def test_run_collection_logs_raw_records_and_syncs_search_index(monkeypatch, tmp
 
     class FakeRegistry:
         @staticmethod
-        def create_collector(source: dict) -> FakeCollector:
+        def create_collector(source: dict[str, object]) -> FakeCollector:
+            _ = source
             return FakeCollector()
 
     class FakeStore:
@@ -44,19 +50,19 @@ def test_run_collection_logs_raw_records_and_syncs_search_index(monkeypatch, tmp
             return None
 
     class FakeRawLogger:
-        def __init__(self, raw_dir) -> None:
+        def __init__(self, raw_dir: Path) -> None:
             self.raw_dir = raw_dir
 
-        def log(self, records, *, source_name: str):
-            captured["raw_logs"].append((source_name, list(records)))
+        def log(self, records: Any, *, source_name: str) -> Path:
+            raw_logs.append((source_name, list(records)))
             return tmp_path / "dummy.jsonl"
 
     class FakeSearchIndex:
-        def __init__(self, db_path) -> None:
+        def __init__(self, db_path: Path) -> None:
             self.db_path = db_path
 
         def upsert(self, link: str, title: str, body: str) -> None:
-            captured["upserts"].append((link, title, body))
+            upserts.append((link, title, body))
 
     monkeypatch.setattr(main, "CollectorRegistry", FakeRegistry)
     monkeypatch.setattr(main, "GraphStore", FakeStore)
@@ -68,10 +74,10 @@ def test_run_collection_logs_raw_records_and_syncs_search_index(monkeypatch, tmp
 
     main.run_collection(config, sources_config)
 
-    assert captured["raw_logs"]
-    source_name, records = captured["raw_logs"][0]
+    assert raw_logs
+    source_name, records = raw_logs[0]
     assert source_name == "fallcent"
     assert records[0]["product_id"] == "p-1"
-    assert captured["upserts"] == [
+    assert upserts == [
         ("https://shop/p1", "닌텐도 스위치 OLED", "fallcent game Nintendo")
     ]
