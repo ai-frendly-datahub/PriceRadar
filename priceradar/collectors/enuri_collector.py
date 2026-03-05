@@ -13,6 +13,7 @@ from urllib.parse import urljoin, urlparse
 
 import requests
 from bs4 import BeautifulSoup
+from tenacity import retry, stop_after_attempt, wait_exponential
 
 from priceradar.collectors.base import BaseCollector, RawItem
 
@@ -30,9 +31,7 @@ class EnuriCollector(BaseCollector):
         super().__init__(source_id, config)
         self.base_url = "https://www.enuri.com"
         self.url = config.get("url", self.base_url)
-        self.user_agent = config.get(
-            "user_agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"
-        )
+        self.user_agent = config.get("user_agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64)")
         self.timeout = config.get("timeout", 30)
         self.category = config.get("category", "all")
         self.category_code = config.get("category_code")  # gcate 파라미터
@@ -56,8 +55,16 @@ class EnuriCollector(BaseCollector):
             print(f"[{self.source_id}] 수집 실패: {e}")
             return []
 
+    @retry(
+        stop=stop_after_attempt(3),
+        wait=wait_exponential(multiplier=1, min=2, max=10),
+    )
     def _fetch_html(self, url: str) -> Optional[str]:
-        """URL에서 HTML 가져오기"""
+        """
+        URL에서 HTML 가져오기 (재시도 로직 포함).
+
+        최대 3회 재시도, 지수 백오프 대기 (2~10초).
+        """
         headers = {
             "User-Agent": self.user_agent,
             "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
@@ -71,7 +78,7 @@ class EnuriCollector(BaseCollector):
             return response.text
         except Exception as e:
             print(f"[{self.source_id}] HTML 가져오기 실패 ({url}): {e}")
-            return None
+            raise
 
     def _parse_js_data(self, soup: BeautifulSoup) -> list[RawItem]:
         """JavaScript 데이터 객체에서 상품 정보 추출"""
@@ -206,9 +213,7 @@ class EnuriCollector(BaseCollector):
         hash_obj = hashlib.md5(url.encode())
         return f"{self.source_id}_{hash_obj.hexdigest()[:12]}"
 
-    def _infer_platform(
-        self, shop_name: Optional[str], url: str
-    ) -> Optional[str]:
+    def _infer_platform(self, shop_name: Optional[str], url: str) -> Optional[str]:
         """판매처명과 URL에서 플랫폼 추론"""
         if shop_name:
             shop_lower = shop_name.lower()
@@ -253,8 +258,6 @@ class EnuriCategoryCollector(EnuriCollector):
         # 카테고리 코드가 있으면 URL 생성
         category_code = config.get("category_code")
         if category_code:
-            config[
-                "url"
-            ] = f"https://www.enuri.com/m/cpp.jsp?tab=enuri&gcate={category_code}"
+            config["url"] = f"https://www.enuri.com/m/cpp.jsp?tab=enuri&gcate={category_code}"
 
         super().__init__(source_id, config)

@@ -7,6 +7,12 @@ from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Any, Optional
 
+from priceradar.validators import (
+    validate_discount_rate,
+    validate_price_range,
+    validate_url_format,
+)
+
 
 @dataclass
 class RawItem:
@@ -52,9 +58,31 @@ class BaseCollector(ABC):
         pass
 
     def validate_item(self, item: RawItem) -> bool:
-        """수집한 아이템의 유효성을 검증"""
+        """
+        수집한 아이템의 유효성을 검증.
+
+        검증 항목:
+        - 필수 필드: product_id, title, url
+        - URL 형식 유효성
+        - 가격 범위 (100원 ~ 10억 원)
+        - 할인율 범위 (0.0 ~ 1.0)
+        """
         if not item.product_id or not item.title or not item.url:
             return False
-        if item.current_price is not None and item.current_price < 0:
+
+        if not validate_url_format(item.url):
             return False
+
+        if not validate_price_range(item.current_price):
+            return False
+
+        if not validate_price_range(item.avg_price):
+            return False
+
+        if not validate_price_range(item.list_price):
+            return False
+
+        if not validate_discount_rate(item.discount_rate):
+            return False
+
         return True

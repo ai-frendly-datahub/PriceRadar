@@ -12,6 +12,7 @@ from urllib.parse import parse_qs, urljoin, urlparse
 
 import requests
 from bs4 import BeautifulSoup, Tag
+from tenacity import retry, stop_after_attempt, wait_exponential
 
 from priceradar.collectors.base import BaseCollector, RawItem
 
@@ -29,9 +30,7 @@ class FallcentCollector(BaseCollector):
         super().__init__(source_id, config)
         self.base_url = "https://fallcent.com"
         self.url = config.get("url", self.base_url)
-        self.user_agent = config.get(
-            "user_agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"
-        )
+        self.user_agent = config.get("user_agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64)")
         self.timeout = config.get("timeout", 30)
         self.category = config.get("category", "all")
 
@@ -49,8 +48,16 @@ class FallcentCollector(BaseCollector):
             print(f"[{self.source_id}] 수집 실패: {e}")
             return []
 
+    @retry(
+        stop=stop_after_attempt(3),
+        wait=wait_exponential(multiplier=1, min=2, max=10),
+    )
     def _fetch_html(self, url: str) -> Optional[str]:
-        """URL에서 HTML 가져오기"""
+        """
+        URL에서 HTML 가져오기 (재시도 로직 포함).
+
+        최대 3회 재시도, 지수 백오프 대기 (2~10초).
+        """
         headers = {"User-Agent": self.user_agent}
 
         try:
@@ -60,7 +67,7 @@ class FallcentCollector(BaseCollector):
             return response.text
         except Exception as e:
             print(f"[{self.source_id}] HTML 가져오기 실패 ({url}): {e}")
-            return None
+            raise
 
     def _parse_products(self, soup: BeautifulSoup) -> list[RawItem]:
         """상품 목록 파싱"""
