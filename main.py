@@ -7,6 +7,8 @@ PriceRadar 메인 실행 스크립트
     python main.py --mode scheduler         # 주기적 실행 (24시간 간격)
 """
 
+from __future__ import annotations
+
 import argparse
 import os
 import time
