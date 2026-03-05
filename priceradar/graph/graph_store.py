@@ -35,12 +35,8 @@ class GraphStore:
     def _init_schema(self) -> None:
         """테이블 스키마 초기화"""
         # 시퀀스 먼저 생성
-        self.conn.execute(
-            "CREATE SEQUENCE IF NOT EXISTS snapshot_seq START 1"
-        )
-        self.conn.execute(
-            "CREATE SEQUENCE IF NOT EXISTS score_seq START 1"
-        )
+        self.conn.execute("CREATE SEQUENCE IF NOT EXISTS snapshot_seq START 1")
+        self.conn.execute("CREATE SEQUENCE IF NOT EXISTS score_seq START 1")
 
         # products 테이블
         self.conn.execute(
@@ -102,9 +98,7 @@ class GraphStore:
         self.conn.execute(
             "CREATE INDEX IF NOT EXISTS idx_snapshots_product ON price_snapshots(product_id)"
         )
-        self.conn.execute(
-            "CREATE INDEX IF NOT EXISTS idx_snapshots_ts ON price_snapshots(ts)"
-        )
+        self.conn.execute("CREATE INDEX IF NOT EXISTS idx_snapshots_ts ON price_snapshots(ts)")
         self.conn.execute(
             "CREATE INDEX IF NOT EXISTS idx_scores_product ON price_scores(product_id)"
         )
@@ -268,9 +262,54 @@ class GraphStore:
 
         return [dict(zip(columns, row)) for row in result]
 
-    def get_product_history(
-        self, product_id: str, limit: int = 30
-    ) -> list[dict[str, Any]]:
+    def get_product(self, product_id: str) -> Optional[dict[str, Any]]:
+        """특정 상품 정보 조회"""
+        result = self.conn.execute(
+            """
+            SELECT product_id, title, url, category, brand, platform, image_url
+            FROM products
+            WHERE product_id = ?
+        """,
+            [product_id],
+        ).fetchone()
+
+        if not result:
+            return None
+
+        return {
+            "product_id": result[0],
+            "title": result[1],
+            "url": result[2],
+            "category": result[3],
+            "brand": result[4],
+            "platform": result[5],
+            "image_url": result[6],
+        }
+
+    def get_recent_snapshots(self, limit: int = 20) -> list[dict[str, Any]]:
+        """최근 스냅샷 조회"""
+        result = self.conn.execute(
+            """
+            SELECT product_id, ts, current_price, avg_price, discount_rate
+            FROM price_snapshots
+            ORDER BY ts DESC
+            LIMIT ?
+        """,
+            [limit],
+        ).fetchall()
+
+        return [
+            {
+                "product_id": row[0],
+                "ts": row[1],
+                "current_price": row[2],
+                "avg_price": row[3],
+                "discount_rate": row[4],
+            }
+            for row in result
+        ]
+
+    def get_product_history(self, product_id: str, limit: int = 30) -> list[dict[str, Any]]:
         """특정 상품의 가격 히스토리 조회"""
         result = self.conn.execute(
             """
@@ -296,17 +335,11 @@ class GraphStore:
 
     def get_stats(self) -> dict[str, Any]:
         """전체 통계 조회"""
-        total_products = self.conn.execute(
-            "SELECT COUNT(*) FROM products"
-        ).fetchone()[0]
+        total_products = self.conn.execute("SELECT COUNT(*) FROM products").fetchone()[0]
 
-        total_snapshots = self.conn.execute(
-            "SELECT COUNT(*) FROM price_snapshots"
-        ).fetchone()[0]
+        total_snapshots = self.conn.execute("SELECT COUNT(*) FROM price_snapshots").fetchone()[0]
 
-        total_scores = self.conn.execute(
-            "SELECT COUNT(*) FROM price_scores"
-        ).fetchone()[0]
+        total_scores = self.conn.execute("SELECT COUNT(*) FROM price_scores").fetchone()[0]
 
         categories = self.conn.execute(
             """

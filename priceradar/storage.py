@@ -8,6 +8,7 @@ from typing import Iterable
 import duckdb
 
 from .models import PriceEvent, PriceSnapshot, Product
+from .validators import detect_duplicate_products, normalize_title
 
 
 def _utc_naive(dt: datetime) -> datetime:
@@ -69,16 +70,62 @@ class PriceStorage:
         )
 
     def upsert_products(self, products: Iterable[Product]) -> None:
+        """
+        Upsert products with duplicate detection.
+
+        Detects duplicates based on normalized title and URL similarity.
+        If a duplicate is found, the existing product is updated instead of creating a new one.
+        """
         for p in products:
+            existing_duplicate = self._find_duplicate_product(p)
+
+            if existing_duplicate:
+                product_id = existing_duplicate
+            else:
+                product_id = p.id
+
             attr_json = json.dumps(p.attributes, ensure_ascii=False) if p.attributes else None
-            self.conn.execute("DELETE FROM products WHERE id = ?", [p.id])
+            self.conn.execute("DELETE FROM products WHERE id = ?", [product_id])
             self.conn.execute(
                 """
                 INSERT INTO products (id, title, category, brand, source_platform, product_url, image_url, attributes_json)
                 VALUES (?, ?, ?, ?, ?, ?, ?, ?)
                 """,
-                [p.id, p.title, p.category, p.brand, p.source_platform, p.product_url, p.image_url, attr_json],
+                [
+                    product_id,
+                    p.title,
+                    p.category,
+                    p.brand,
+                    p.source_platform,
+                    p.product_url,
+                    p.image_url,
+                    attr_json,
+                ],
             )
+
+    def _find_duplicate_product(self, product: Product) -> str | None:
+        """
+        Find existing product that is a duplicate of the given product.
+
+        Returns the ID of the duplicate product if found, None otherwise.
+        """
+        try:
+            result = self.conn.execute(
+                "SELECT id, title, product_url FROM products LIMIT 1000"
+            ).fetchall()
+
+            for existing_id, existing_title, existing_url in result:
+                if detect_duplicate_products(
+                    product.title,
+                    product.product_url,
+                    existing_title,
+                    existing_url,
+                ):
+                    return existing_id
+
+            return None
+        except Exception:
+            return None
 
     def insert_snapshots(self, snapshots: Iterable[PriceSnapshot]) -> int:
         count = 0
