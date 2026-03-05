@@ -103,7 +103,9 @@ def test_handle_search_uses_nl_parser_and_fts(tmp_path) -> None:
     index = SearchIndex(search_db)
     index.upsert("https://shop/p1", "닌텐도 스위치 OLED", "enuri game Nintendo")
 
-    result = handle_search(search_db_path=search_db, db_path=db_path, query="최근 3일 닌텐도 5개", limit=20)
+    result = handle_search(
+        search_db_path=search_db, db_path=db_path, query="최근 3일 닌텐도 5개", limit=20
+    )
     payload = json.loads(result)
 
     assert payload["days"] == 3
@@ -129,7 +131,9 @@ def test_handle_sql_allows_select_only(tmp_path) -> None:
     _seed_db(db_path)
 
     blocked = json.loads(handle_sql(db_path=db_path, query="DELETE FROM products"))
-    allowed = json.loads(handle_sql(db_path=db_path, query="SELECT title FROM products ORDER BY title"))
+    allowed = json.loads(
+        handle_sql(db_path=db_path, query="SELECT title FROM products ORDER BY title")
+    )
 
     assert blocked["ok"] is False
     assert allowed["ok"] is True
@@ -159,3 +163,42 @@ def test_handle_price_watch_filters_by_min_score(tmp_path) -> None:
 
     assert len(payload["results"]) == 1
     assert payload["results"][0]["title"] == "닌텐도 스위치 OLED"
+
+
+@pytest.mark.unit
+def test_handle_sql_catches_invalid_sql_exception(tmp_path) -> None:
+    """line 88-89: SQL 실행 예외 처리"""
+    db_path = tmp_path / "priceradar.duckdb"
+    _seed_db(db_path)
+
+    result = handle_sql(db_path=db_path, query="SELECT * FROM nonexistent_table")
+    payload = json.loads(result)
+
+    assert payload["ok"] is False
+    assert "error" in payload
+
+
+@pytest.mark.unit
+def test_is_read_only_query_rejects_empty_string(tmp_path) -> None:
+    """line 203: _is_read_only_query에 빈 문자열 전달"""
+    db_path = tmp_path / "priceradar.duckdb"
+    _seed_db(db_path)
+
+    result = handle_sql(db_path=db_path, query="   ")
+    payload = json.loads(result)
+
+    assert payload["ok"] is False
+    assert "Only SELECT/WITH/EXPLAIN" in payload["error"]
+
+
+@pytest.mark.unit
+def test_is_read_only_query_rejects_multi_statement(tmp_path) -> None:
+    """line 206: 세미콜론이 중간에 있는 SQL (multi-statement)"""
+    db_path = tmp_path / "priceradar.duckdb"
+    _seed_db(db_path)
+
+    result = handle_sql(db_path=db_path, query="SELECT * FROM products; DELETE FROM products")
+    payload = json.loads(result)
+
+    assert payload["ok"] is False
+    assert "Only SELECT/WITH/EXPLAIN" in payload["error"]
