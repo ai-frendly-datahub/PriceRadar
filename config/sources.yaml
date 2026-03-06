@@ -3,7 +3,6 @@
 
 sources:
   # ===== 폴센트 (Fallcent) - 쿠팡 전문 가격 추적 =====
-  # Note: fallcent_main이 모든 카테고리를 자동으로 수집합니다
   - id: fallcent_main
     name: "폴센트 메인"
     type: fallcent
@@ -24,6 +23,56 @@ sources:
     collector_type: C3_enuri
     category: all
     description: "에누리 메인 페이지 - 인기 상품"
+
+  # ===== 알구몬 (Algumon) - 실시간 핫딜 큐레이션 =====
+  - id: algumon_main
+    name: "알구몬 메인"
+    type: algumon
+    url: "https://www.algumon.com/"
+    enabled: true
+    trust_tier: T2_expert
+    collector_type: C3_algumon
+    category: electronics
+    request_delay: 1.0
+    max_items: 120
+    list_endpoints:
+      - path: "/more"
+        list_type: latest
+        max_pages: 2
+      - path: "/deal/rank/yesterday/more"
+        list_type: yesterday_rank
+        max_pages: 1
+      - path: "/deal/toomuchlike/10/more"
+        list_type: too_much_like
+        max_pages: 1
+      - path: "/deal/toomuchtalk/50/more"
+        list_type: too_much_talk
+        max_pages: 1
+    description: "알구몬 실시간 핫딜 수집 (최신/어제랭크/추천/댓글)"
+
+  - id: ruliweb_market
+    name: "루리웹 장터"
+    type: ruliweb
+    url: "https://bbs.ruliweb.com/market/board/1020"
+    enabled: true
+    trust_tier: T2_expert
+    collector_type: C3_ruliweb
+    category: market
+    max_pages: 5
+    delay_between_requests: 0.5
+    description: "루리웹 장터 게시판 - 게임/IT/디지털 세일 및 중고 거래"
+
+  - id: quasarzone_saleinfo
+    name: "퀘이사존 핫딜"
+    type: quasarzone
+    url: "https://quasarzone.com/bbs/qb_saleinfo"
+    enabled: true
+    trust_tier: T2_expert
+    collector_type: C3_quasarzone
+    category: electronics
+    max_pages: 10
+    request_delay: 1.0
+    description: "퀘이사존 세일 정보 게시판 - IT/가전/디지털 할인 정보"
 
   # 카테고리별 소스 (필요시 활성화)
   # - id: enuri_electronics
@@ -47,6 +96,7 @@ category_mappings:
   pet: "반려동물"
   sports: "스포츠"
   fashion: "패션"
+  market: "장터/핫딜"
 
 # 쇼핑몰 매핑
 platforms:
