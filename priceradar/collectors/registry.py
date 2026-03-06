@@ -19,6 +19,9 @@ class CollectorRegistry:
         "C3_algumon": ("priceradar.collectors.algumon_collector", "AlgumonCollector"),
         "C3_quasarzone": ("priceradar.collectors.quasarzone_collector", "QuasarzoneCollector"),
         "C3_ruliweb": ("priceradar.collectors.ruliweb_collector", "RuliwebCollector"),
+        "C3_clien": ("priceradar.collectors.clien_collector", "ClienCollector"),
+        "C3_fmkorea": ("priceradar.collectors.fmkorea_collector", "FmkoreaCollector"),
+        "C3_dealbada": ("priceradar.collectors.dealbada_collector", "DealbadaCollector"),
     }
 
     @classmethod

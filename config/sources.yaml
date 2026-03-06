@@ -115,3 +115,45 @@ platforms:
   elevenst:
     name: "11번가"
     domain: "11st.co.kr"
+
+  # ===== 클리앙 (Clien) - 알뜰구매 게시판 =====
+  - id: clien_albulgumai
+    name: "클리앙 알뜰구매"
+    type: clien
+    url: "https://www.clien.net/service/board/park"
+    enabled: true
+    trust_tier: T2_expert
+    collector_type: C3_clien
+    category: market
+    request_delay: 1.0
+    max_items: 100
+    max_pages: 5
+    description: "클리앙 알뜰구매 게시판 - 다양한 카테고리의 핫딜 정보"
+
+  # ===== 펨코 (FMKorea) - 핫딜 게시판 =====
+  - id: fmkorea_hotdeal
+    name: "펨코 핫딜"
+    type: fmkorea
+    url: "https://www.fmkorea.com/hotdeal"
+    enabled: true
+    trust_tier: T2_expert
+    collector_type: C3_fmkorea
+    category: market
+    request_delay: 1.0
+    max_items: 200
+    max_pages: 10
+    description: "펨코 핫딜 게시판 - 여성 커뮤니티 기반 핫딜 정보"
+
+  # ===== 딜바다 (Dealbada) - 핫딜 정보 =====
+  - id: dealbada_main
+    name: "딜바다"
+    type: dealbada
+    url: "https://www.dealbada.com/hotdeal"
+    enabled: true
+    trust_tier: T2_expert
+    collector_type: C3_dealbada
+    category: market
+    request_delay: 1.0
+    max_items: 100
+    max_pages: 5
+    description: "딜바다 - 다양한 쇼핑몰의 핫딜 정보 통합"
