@@ -10,6 +10,12 @@ collection:
   timeout: 30
   retry_count: 3
   delay_between_requests: 1.0
+  algumon_request_delay: 1.0
+  algumon_max_items: 120
+  quasarzone:
+    max_pages: 10
+    request_delay: 1.0
+    limit: 50
 
 # 스코어링 가중치
 scoring:
@@ -28,6 +34,7 @@ categories:
   - pet
   - sports
   - fashion
+  - market
 
 # 최소 임계값
 thresholds:

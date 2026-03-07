@@ -116,6 +116,9 @@ platforms:
     name: "11번가"
     domain: "11st.co.kr"
 
+
+# 데이터 소스 목록
+sources:
   # ===== 클리앙 (Clien) - 알뜰구매 게시판 =====
   - id: clien_albulgumai
     name: "클리앙 알뜰구매"
@@ -128,7 +131,7 @@ platforms:
     request_delay: 1.0
     max_items: 100
     max_pages: 5
-    description: "클리앙 알뜰구매 게시판 - 다양한 카테고리의 핫딜 정보"
+    description: "클리앙 알뜰구매 게시판 - 핫딜 정보"
 
   # ===== 펨코 (FMKorea) - 핫딜 게시판 =====
   - id: fmkorea_hotdeal

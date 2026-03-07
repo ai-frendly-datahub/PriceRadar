@@ -1,0 +1,23 @@
+notifications:
+  enabled: true
+  channels:
+    - webhook
+
+  webhook_url: "${WEBHOOK_URL}"
+
+  email:
+    smtp_host: "${SMTP_HOST}"
+    smtp_port: 587
+    username: "${SMTP_USERNAME}"
+    password: "${SMTP_PASSWORD}"
+    from_address: "${EMAIL_FROM}"
+    to_addresses:
+      - "${EMAIL_TO}"
+
+  telegram:
+    bot_token: "${TELEGRAM_BOT_TOKEN}"
+    chat_id: "${TELEGRAM_CHAT_ID}"
+
+  rules:
+    lowest_price_drop_percent: 0
+    discount_rate_percent: 50
