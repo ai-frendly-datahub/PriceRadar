@@ -11,7 +11,7 @@ from __future__ import annotations
 
 import re
 from difflib import SequenceMatcher
-from typing import Optional
+from typing import Any, Optional
 from urllib.parse import urlparse
 
 
@@ -145,7 +145,7 @@ def validate_discount_rate(discount_rate: Optional[float]) -> bool:
     return 0.0 <= discount_rate <= 1.0
 
 
-def validate_url_format(url: str) -> bool:
+def validate_url_format(url: str | None) -> bool:
     """
     Validate if URL has valid format.
 
@@ -172,6 +172,24 @@ def validate_url_format(url: str) -> bool:
         return bool(parsed.scheme and parsed.netloc)
     except Exception:
         return False
+
+
+def detect_duplicate_articles(
+    title1: str,
+    url1: str,
+    title2: str,
+    url2: str,
+    title_threshold: float = 0.85,
+    url_threshold: float = 0.8,
+) -> bool:
+    norm_title1 = normalize_title(title1)
+    norm_title2 = normalize_title(title2)
+
+    title_ratio = SequenceMatcher(None, norm_title1, norm_title2).ratio()
+    if title_ratio < title_threshold:
+        return False
+
+    return is_similar_url(url1, url2, url_threshold)
 
 
 def detect_duplicate_products(
@@ -205,14 +223,71 @@ def detect_duplicate_products(
         ... )
         True
     """
-    # Normalize titles
-    norm_title1 = normalize_title(title1)
-    norm_title2 = normalize_title(title2)
+    return detect_duplicate_articles(
+        title1,
+        url1,
+        title2,
+        url2,
+        title_threshold=title_threshold,
+        url_threshold=url_threshold,
+    )
 
-    # Check title similarity
-    title_ratio = SequenceMatcher(None, norm_title1, norm_title2).ratio()
-    if title_ratio < title_threshold:
-        return False
 
-    # Check URL similarity
-    return is_similar_url(url1, url2, url_threshold)
+def _get_value(article: Any, *keys: str) -> Any:
+    if isinstance(article, dict):
+        for key in keys:
+            if key in article:
+                return article[key]
+        return None
+
+    for key in keys:
+        if hasattr(article, key):
+            return getattr(article, key)
+    return None
+
+
+def validate_article(article: Any) -> tuple[bool, list[str]]:
+    errors: list[str] = []
+
+    title = _get_value(article, "title")
+    link = _get_value(article, "link", "url")
+    summary = _get_value(article, "summary", "category")
+    source = _get_value(article, "source", "source_id", "source_name")
+    category = _get_value(article, "category", "platform")
+
+    current_price = _get_value(article, "current_price")
+    avg_price = _get_value(article, "avg_price")
+    list_price = _get_value(article, "list_price")
+    discount_rate = _get_value(article, "discount_rate")
+
+    if not title or not isinstance(title, str):
+        errors.append("title is missing or not a string")
+    elif len(title.strip()) == 0:
+        errors.append("title is empty")
+
+    if not link or not isinstance(link, str):
+        errors.append("link is missing or not a string")
+    elif not validate_url_format(link):
+        errors.append(f"link has invalid URL format: {link}")
+
+    if not summary or not isinstance(summary, str):
+        errors.append("summary is missing or not a string")
+    elif len(summary.strip()) == 0:
+        errors.append("summary is empty")
+
+    if not source or not isinstance(source, str):
+        errors.append("source is missing or not a string")
+
+    if not category or not isinstance(category, str):
+        errors.append("category is missing or not a string")
+
+    if not validate_price_range(current_price):
+        errors.append(f"current_price out of range: {current_price}")
+    if not validate_price_range(avg_price):
+        errors.append(f"avg_price out of range: {avg_price}")
+    if not validate_price_range(list_price):
+        errors.append(f"list_price out of range: {list_price}")
+    if not validate_discount_rate(discount_rate):
+        errors.append(f"discount_rate out of range: {discount_rate}")
+
+    return len(errors) == 0, errors

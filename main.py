@@ -22,10 +22,13 @@ import yaml
 from priceradar.analyzers.price_scorer import PriceScorer
 from priceradar.collectors.registry import CollectorRegistry
 from priceradar.collectors.base import RawItem
+from priceradar.config import load_notification_config
 from priceradar.graph.graph_store import GraphStore
+from priceradar.notifier import Notifier, detect_price_notifications
 from priceradar.raw_logger import RawLogger
 from priceradar.reporters.html_reporter import HtmlReporter
 from priceradar.search_index import SearchIndex
+from priceradar.validators import validate_article
 
 
 def load_config(config_path: str = "config/config.yaml") -> dict[str, Any]:
@@ -40,7 +43,11 @@ def load_sources(sources_path: str = "config/sources.yaml") -> dict[str, Any]:
         return yaml.safe_load(f)
 
 
-def run_collection(config: dict[str, Any], sources_config: dict[str, Any]) -> None:
+def run_collection(
+    config: dict[str, Any],
+    sources_config: dict[str, Any],
+    notifier: Notifier | None = None,
+) -> None:
     """데이터 수집 실행"""
     print("\n=== 데이터 수집 시작 ===")
     start_time = time.time()
@@ -72,15 +79,43 @@ def run_collection(config: dict[str, Any], sources_config: dict[str, Any]) -> No
             items = collector.collect()
             total_items_collected += len(items)
 
-            raw_logger.log((_raw_item_to_record(item) for item in items), source_name=source_id)
+            validated_items: list[RawItem] = []
+            for item in items:
+                is_valid, errors = validate_article(item)
+                if not is_valid:
+                    print(f"[{source_id}] invalid item skipped: {'; '.join(errors)}")
+                    continue
+                validated_items.append(item)
+
+            unique_items: list[RawItem] = []
+            for item in validated_items:
+                if item.url and item.url in seen_urls:
+                    continue
+                unique_items.append(item)
+
+            if notifier is not None and unique_items:
+                product_ids = [item.product_id for item in unique_items if item.product_id]
+                previous_states = _load_previous_product_states(store, product_ids)
+                events = detect_price_notifications(
+                    unique_items,
+                    previous_states=previous_states,
+                    rules=notifier.config.rules,
+                )
+                for event in events:
+                    notifier.send(
+                        title=event.title,
+                        message=event.message,
+                        priority=event.priority,
+                        metadata=event.metadata,
+                    )
+
+            raw_logger.log(
+                (_raw_item_to_record(item) for item in validated_items), source_name=source_id
+            )
 
             # 중복 제거 후 저장
             saved_count = 0
-            for item in items:
-                # URL 기준 중복 확인
-                if item.url and item.url in seen_urls:
-                    continue
-
+            for item in unique_items:
                 store.save_raw_item(item)
                 search_index.upsert(
                     link=item.url,
@@ -92,7 +127,7 @@ def run_collection(config: dict[str, Any], sources_config: dict[str, Any]) -> No
                 saved_count += 1
                 total_items_saved += 1
 
-            print(f"[{source_id}] {len(items)}개 아이템 수집 완료")
+            print(f"[{source_id}] {len(validated_items)}개 아이템 수집 완료")
 
         except Exception as e:
             print(f"[{source_id}] 수집 실패: {e}")
@@ -116,6 +151,35 @@ def _raw_item_to_record(item: RawItem) -> dict[str, Any]:
 
 def _build_search_body(platform: str | None, category: str | None, brand: str | None) -> str:
     return " ".join(part for part in [platform, category, brand] if part)
+
+
+def _load_previous_product_states(
+    store: GraphStore,
+    product_ids: list[str],
+) -> dict[str, dict[str, Any]]:
+    unique_ids = [product_id for product_id in set(product_ids) if product_id]
+    if not unique_ids:
+        return {}
+
+    placeholders = ",".join("?" for _ in unique_ids)
+    query = f"""
+        SELECT
+            product_id,
+            MIN(CASE WHEN current_price > 0 THEN current_price END) AS min_price,
+            arg_max(current_price, ts) AS last_price
+        FROM price_snapshots
+        WHERE product_id IN ({placeholders})
+        GROUP BY product_id
+    """
+
+    rows = store.conn.execute(query, unique_ids).fetchall()
+    return {
+        str(product_id): {
+            "min_price": float(min_price) if min_price is not None else None,
+            "last_price": float(last_price) if last_price is not None else None,
+        }
+        for product_id, min_price, last_price in rows
+    }
 
 
 def run_scoring(config: dict[str, Any]) -> None:
@@ -233,7 +297,10 @@ def generate_report(config: dict[str, Any], output_dir: str | None = None) -> No
 
 
 def run_once(
-    config: dict[str, Any], sources_config: dict[str, Any], generate_report_flag: bool = False
+    config: dict[str, Any],
+    sources_config: dict[str, Any],
+    generate_report_flag: bool = False,
+    notifier: Notifier | None = None,
 ) -> None:
     """1회 실행"""
     print("\n" + "=" * 60)
@@ -241,7 +308,7 @@ def run_once(
     print("=" * 60)
 
     # 1. 데이터 수집
-    run_collection(config, sources_config)
+    run_collection(config, sources_config, notifier)
 
     # 2. 스코어링
     run_scoring(config)
@@ -270,13 +337,16 @@ def run_once(
 
 
 def run_scheduler(
-    config: dict[str, Any], sources_config: dict[str, Any], interval_hours: int = 24
+    config: dict[str, Any],
+    sources_config: dict[str, Any],
+    interval_hours: int = 24,
+    notifier: Notifier | None = None,
 ) -> None:
     """주기적 실행"""
     print(f"스케줄러 시작 ({interval_hours}시간 간격)")
 
     while True:
-        run_once(config, sources_config, generate_report_flag=True)
+        run_once(config, sources_config, generate_report_flag=True, notifier=notifier)
 
         print(f"\n다음 실행까지 {interval_hours}시간 대기 중...")
         time.sleep(interval_hours * 3600)
@@ -312,18 +382,25 @@ def main() -> None:
         default="config/sources.yaml",
         help="소스 설정 파일 경로",
     )
+    parser.add_argument(
+        "--notifications",
+        default="config/notifications.yaml",
+        help="알림 설정 파일 경로",
+    )
 
     args = parser.parse_args()
 
     # 설정 로드
     config = load_config(args.config)
     sources_config = load_sources(args.sources)
+    notification_config = load_notification_config(Path(args.notifications))
+    notifier = Notifier(notification_config)
 
     # 모드별 실행
     if args.mode == "once":
-        run_once(config, sources_config, generate_report_flag=args.report)
+        run_once(config, sources_config, generate_report_flag=args.report, notifier=notifier)
     elif args.mode == "scheduler":
-        run_scheduler(config, sources_config, interval_hours=args.interval)
+        run_scheduler(config, sources_config, interval_hours=args.interval, notifier=notifier)
 
 
 if __name__ == "__main__":
