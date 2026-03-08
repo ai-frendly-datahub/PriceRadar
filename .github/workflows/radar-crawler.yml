@@ -2,8 +2,10 @@ name: Radar Crawler (Optimized)
 
 on:
   workflow_dispatch:
-  schedule:
-    - cron: "0 9 * * *"  # Daily at 00:00 UTC (adjust per project)
+  # DISABLED: This workflow uses Standard Tier syntax incompatible with this Advanced Tier repo
+  # Use daily-collection.yml instead
+  # schedule:
+  #   - cron: "0 9 * * *"  # Daily at 00:00 UTC (adjust per project)
 
 permissions:
   contents: write

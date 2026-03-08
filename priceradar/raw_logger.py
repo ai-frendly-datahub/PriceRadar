@@ -16,7 +16,7 @@ class RawLogger:
         date_dir.mkdir(parents=True, exist_ok=True)
 
         file_path = date_dir / f"{source_name}.jsonl"
-        with file_path.open("w", encoding="utf-8") as file_obj:
+        with file_path.open("a", encoding="utf-8") as file_obj:
             for record in records:
                 file_obj.write(json.dumps(record, ensure_ascii=False, default=str))
                 file_obj.write("\n")
