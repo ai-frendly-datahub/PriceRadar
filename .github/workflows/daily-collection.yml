@@ -32,6 +32,21 @@ jobs:
       run: |
         python main.py --mode once --report
 
+    - name: Run Quality Checks
+      if: always()
+      run: |
+        python scripts/check_quality.py > quality_report.txt 2>&1 || true
+        cat quality_report.txt >> $GITHUB_STEP_SUMMARY
+      continue-on-error: true
+
+    - name: Archive Quality Report
+      if: always()
+      uses: actions/upload-artifact@v4
+      with:
+        name: quality-report-${{ github.run_number }}
+        path: quality_report.txt
+        retention-days: 30
+
     - name: Upload report artifact
       uses: actions/upload-artifact@v4
       with:
