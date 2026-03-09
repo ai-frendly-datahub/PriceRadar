@@ -63,6 +63,7 @@ dmypy.json
 *.duckdb.wal
 analyze_*.py
 test_*.py
+!tests/unit/forecasting/test_price_forecast.py
 debug_*.py
 check_db.py
 find_*.py

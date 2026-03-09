@@ -209,7 +209,8 @@ class GraphStore:
                 s.explanation,
                 snap.current_price,
                 snap.avg_price,
-                snap.discount_rate
+                snap.discount_rate,
+                snap.collected_at
             FROM products p
             INNER JOIN (
                 SELECT product_id, MAX(ts) as max_ts
@@ -219,7 +220,7 @@ class GraphStore:
             INNER JOIN price_scores s
                 ON s.product_id = latest.product_id AND s.ts = latest.max_ts
             LEFT JOIN (
-                SELECT product_id, current_price, avg_price, discount_rate
+                SELECT product_id, ts AS collected_at, current_price, avg_price, discount_rate
                 FROM price_snapshots
                 WHERE (product_id, ts) IN (
                     SELECT product_id, MAX(ts)
@@ -231,7 +232,7 @@ class GraphStore:
 
         if category:
             query += " WHERE p.category = ?"
-            params = [category]
+            params: list[Any] = [category]
         else:
             params = []
 
@@ -258,6 +259,7 @@ class GraphStore:
             "current_price",
             "avg_price",
             "discount_rate",
+            "collected_at",
         ]
 
         return [dict(zip(columns, row)) for row in result]
@@ -335,11 +337,14 @@ class GraphStore:
 
     def get_stats(self) -> dict[str, Any]:
         """전체 통계 조회"""
-        total_products = self.conn.execute("SELECT COUNT(*) FROM products").fetchone()[0]
+        products_row = self.conn.execute("SELECT COUNT(*) FROM products").fetchone()
+        total_products = int(products_row[0]) if products_row else 0
 
-        total_snapshots = self.conn.execute("SELECT COUNT(*) FROM price_snapshots").fetchone()[0]
+        snapshots_row = self.conn.execute("SELECT COUNT(*) FROM price_snapshots").fetchone()
+        total_snapshots = int(snapshots_row[0]) if snapshots_row else 0
 
-        total_scores = self.conn.execute("SELECT COUNT(*) FROM price_scores").fetchone()[0]
+        scores_row = self.conn.execute("SELECT COUNT(*) FROM price_scores").fetchone()
+        total_scores = int(scores_row[0]) if scores_row else 0
 
         categories = self.conn.execute(
             """
