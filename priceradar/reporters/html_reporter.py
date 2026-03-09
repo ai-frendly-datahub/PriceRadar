@@ -2,12 +2,17 @@
 HTML Reporter - Jinja2 기반 가격 레이다 리포트 생성
 """
 
+import json
 import os
-from datetime import datetime
+from collections import defaultdict
+from datetime import date, datetime
 from pathlib import Path
-from typing import Any
+from typing import Any, Dict, List, Optional, Set
 
 from jinja2 import Environment, FileSystemLoader, select_autoescape
+
+from priceradar.forecasting.price_forecast import forecast_category_prices
+from priceradar.models import Deal
 
 
 class HtmlReporter:
@@ -32,7 +37,7 @@ class HtmlReporter:
 
     def generate_report(
         self,
-        deals: list[dict[str, Any]],
+        deals: List[dict[str, Any]],
         output_path: str,
         title: str = "PriceRadar 일일 리포트",
     ) -> str:
@@ -50,9 +55,11 @@ class HtmlReporter:
         # 출력 디렉터리 생성
         os.makedirs(os.path.dirname(output_path), exist_ok=True)
 
+        forecast_data = self._build_forecast_data(deals)
+
         # 템플릿이 없으면 기본 HTML 생성
         if not self.env:
-            html_content = self._generate_basic_html(deals, title)
+            html_content = self._generate_basic_html(deals, title, forecast_data)
         else:
             template = self.env.get_template("report.html")
             html_content = template.render(
@@ -60,6 +67,7 @@ class HtmlReporter:
                 generated_at=datetime.now(),
                 deals=deals,
                 total_deals=len(deals),
+                forecast_data=forecast_data,
             )
 
         # 파일 저장
@@ -68,9 +76,16 @@ class HtmlReporter:
 
         return output_path
 
-    def _generate_basic_html(self, deals: list[dict[str, Any]], title: str) -> str:
+    def _generate_basic_html(
+        self,
+        deals: List[dict[str, Any]],
+        title: str,
+        forecast_data: Optional[Dict[str, Dict[str, List[Any]]]] = None,
+    ) -> str:
         """기본 HTML 템플릿 (Jinja2 없이)"""
         now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        normalized_forecast_data = forecast_data or {}
+        history_data = self._build_forecast_history(deals, set(normalized_forecast_data.keys()))
 
         # 카테고리 및 플랫폼 목록 추출
         categories = sorted(set(deal.get("category", "기타") for deal in deals))
@@ -111,6 +126,14 @@ class HtmlReporter:
             "        .badge { display: inline-block; padding: 4px 8px; border-radius: 4px; font-size: 12px; margin-right: 5px; }",
             "        .badge-category { background: #007bff; color: white; }",
             "        .badge-platform { background: #6c757d; color: white; }",
+            "        .charts-section { margin-top: 24px; }",
+            "        .chart-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 20px; }",
+            "        .chart-card { flex: 1; background: #f8f9fa; padding: 15px; border-radius: 8px; }",
+            "        .chart-card h3 { margin-top: 0; color: #333; }",
+            "        .chart-card canvas { max-height: 300px; }",
+            "        .forecast-card { margin-top: 20px; }",
+            "        #priceForecastChart { width: 100%; min-height: 360px; }",
+            "        .forecast-empty { color: #6c757d; padding: 10px 0; }",
             "    </style>",
             "</head>",
             "<body>",
@@ -236,8 +259,349 @@ class HtmlReporter:
             [
                 "        </div>",  # dealsContainer
                 "",
+                "        <!-- Charts Section -->",
+                '        <div class="charts-section">',
+                "            <h2>분석 차트</h2>",
+                '            <div class="chart-grid">',
+                '                <div class="chart-card">',
+                "                    <h3>카테고리별 평균 가격</h3>",
+                '                    <canvas id="categoryPriceChart"></canvas>',
+                "                </div>",
+                '                <div class="chart-card">',
+                "                    <h3>할인율 분포</h3>",
+                '                    <canvas id="discountDistributionChart"></canvas>',
+                "                </div>",
+                '                <div class="chart-card">',
+                "                    <h3>카테고리별 평균 점수</h3>",
+                '                    <canvas id="scoreVsCategoryChart"></canvas>',
+                "                </div>",
+                "            </div>",
+                "        </div>",
+                "",
+                "        <!-- Forecast Section -->",
+                '        <div class="charts-section">',
+                "            <h2>Price Forecasts (14-day ahead)</h2>",
+                '            <div class="chart-card forecast-card">',
+                '                <div id="priceForecastChart"></div>',
+                "            </div>",
+                "        </div>",
+                "",
+                "        <!-- Deals Data -->",
+                '        <script id="deals-data" type="application/json">',
+            ]
+        )
+
+        # Serialize deals to JSON
+        deals_json = json.dumps(deals)
+        html_parts.append(deals_json)
+        html_parts.append("        </script>")
+
+        forecast_payload: Dict[str, Dict[str, List[Any]]] = {}
+        for category, payload in normalized_forecast_data.items():
+            category_history = history_data.get(
+                category,
+                {
+                    "history_dates": [],
+                    "history_avg": [],
+                },
+            )
+            forecast_payload[category] = {
+                "dates": payload.get("dates", []),
+                "forecast": payload.get("forecast", []),
+                "lower_80": payload.get("lower_80", []),
+                "upper_80": payload.get("upper_80", []),
+                "lower_95": payload.get("lower_95", []),
+                "upper_95": payload.get("upper_95", []),
+                "history_dates": category_history.get("history_dates", []),
+                "history_avg": category_history.get("history_avg", []),
+            }
+
+        forecast_json = json.dumps(forecast_payload, ensure_ascii=False)
+        html_parts.extend(
+            [
+                "",
+                "        <!-- Forecast Data -->",
+                '        <script id="forecast-data" type="application/json">',
+                forecast_json,
+                "        </script>",
+            ]
+        )
+
+        html_parts.extend(
+            [
+                "",
+                "        <!-- Chart.js Library -->",
+                '        <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.3/dist/chart.umd.min.js"></script>',
+                "        <!-- Plotly Library -->",
+                '        <script src="https://cdn.plot.ly/plotly-2.35.2.min.js"></script>',
+                "",
                 "        <!-- JavaScript -->",
                 "        <script>",
+                "            function readJson(id, fallback) {",
+                "                const elem = document.getElementById(id);",
+                "                if (!elem) return fallback;",
+                "                try {",
+                "                    return JSON.parse(elem.textContent);",
+                "                } catch (e) {",
+                "                    return fallback;",
+                "                }",
+                "            }",
+                "",
+                "            function palette(n) {",
+                "                const colors = [",
+                "                    '#007bff', '#28a745', '#dc3545', '#ffc107', '#17a2b8',",
+                "                    '#6f42c1', '#e83e8c', '#fd7e14', '#20c997', '#6c757d'",
+                "                ];",
+                "                return colors[n % colors.length];",
+                "            }",
+                "",
+                "            const deals = readJson('deals-data', []);",
+                "            const forecastData = readJson('forecast-data', {});",
+                "",
+                "            // Category Price Bar Chart",
+                "            if (deals.length > 0) {",
+                "                const categoryPrices = {};",
+                "                deals.forEach(deal => {",
+                "                    const cat = deal.category || '기타';",
+                "                    if (!categoryPrices[cat]) {",
+                "                        categoryPrices[cat] = { sum: 0, count: 0 };",
+                "                    }",
+                "                    categoryPrices[cat].sum += deal.current_price || 0;",
+                "                    categoryPrices[cat].count += 1;",
+                "                });",
+                "",
+                "                const catLabels = Object.keys(categoryPrices).sort();",
+                "                const catData = catLabels.map(cat => categoryPrices[cat].sum / categoryPrices[cat].count);",
+                "                const catColors = catLabels.map((_, i) => palette(i));",
+                "",
+                "                new Chart(document.getElementById('categoryPriceChart'), {",
+                "                    type: 'bar',",
+                "                    data: {",
+                "                        labels: catLabels,",
+                "                        datasets: [{",
+                "                            label: '평균 가격 (원)',",
+                "                            data: catData,",
+                "                            backgroundColor: catColors,",
+                "                            borderColor: catColors,",
+                "                            borderWidth: 1",
+                "                        }]",
+                "                    },",
+                "                    options: {",
+                "                        responsive: true,",
+                "                        maintainAspectRatio: true,",
+                "                        plugins: {",
+                "                            legend: { display: true }",
+                "                        },",
+                "                        scales: {",
+                "                            y: { beginAtZero: true }",
+                "                        }",
+                "                    }",
+                "                });",
+                "",
+                "                // Discount Distribution Bar Chart",
+                "                const discountBuckets = {};",
+                "                for (let i = 0; i <= 100; i += 10) {",
+                "                    discountBuckets[i] = 0;",
+                "                }",
+                "                deals.forEach(deal => {",
+                "                    const rate = (deal.discount_rate || 0) * 100;",
+                "                    const bucket = Math.floor(rate / 10) * 10;",
+                "                    if (bucket <= 100) {",
+                "                        discountBuckets[bucket] = (discountBuckets[bucket] || 0) + 1;",
+                "                    }",
+                "                });",
+                "",
+                "                const discountLabels = Object.keys(discountBuckets).map(k => k + '%');",
+                "                const discountData = Object.values(discountBuckets);",
+                "",
+                "                new Chart(document.getElementById('discountDistributionChart'), {",
+                "                    type: 'bar',",
+                "                    data: {",
+                "                        labels: discountLabels,",
+                "                        datasets: [{",
+                "                            label: '상품 수',",
+                "                            data: discountData,",
+                "                            backgroundColor: '#ffc107',",
+                "                            borderColor: '#ffc107',",
+                "                            borderWidth: 1",
+                "                        }]",
+                "                    },",
+                "                    options: {",
+                "                        responsive: true,",
+                "                        maintainAspectRatio: true,",
+                "                        plugins: {",
+                "                            legend: { display: true }",
+                "                        },",
+                "                        scales: {",
+                "                            y: { beginAtZero: true }",
+                "                        }",
+                "                    }",
+                "                });",
+                "",
+                "                // Score vs Category Bar Chart",
+                "                const categoryScores = {};",
+                "                deals.forEach(deal => {",
+                "                    const cat = deal.category || '기타';",
+                "                    if (!categoryScores[cat]) {",
+                "                        categoryScores[cat] = { sum: 0, count: 0 };",
+                "                    }",
+                "                    categoryScores[cat].sum += deal.radar_score || 0;",
+                "                    categoryScores[cat].count += 1;",
+                "                });",
+                "",
+                "                const scoreLabels = Object.keys(categoryScores).sort();",
+                "                const scoreData = scoreLabels.map(cat => categoryScores[cat].sum / categoryScores[cat].count);",
+                "                const scoreColors = scoreLabels.map((_, i) => palette(i + 5));",
+                "",
+                "                new Chart(document.getElementById('scoreVsCategoryChart'), {",
+                "                    type: 'bar',",
+                "                    data: {",
+                "                        labels: scoreLabels,",
+                "                        datasets: [{",
+                "                            label: '평균 점수',",
+                "                            data: scoreData,",
+                "                            backgroundColor: scoreColors,",
+                "                            borderColor: scoreColors,",
+                "                            borderWidth: 1",
+                "                        }]",
+                "                    },",
+                "                    options: {",
+                "                        responsive: true,",
+                "                        maintainAspectRatio: true,",
+                "                        plugins: {",
+                "                            legend: { display: true }",
+                "                        },",
+                "                        scales: {",
+                "                            y: { beginAtZero: true, max: 1 }",
+                "                        }",
+                "                    }",
+                "                });",
+                "            }",
+                "",
+                "            const forecastCategories = Object.keys(forecastData);",
+                "            if (forecastCategories.length > 0 && typeof Plotly !== 'undefined') {",
+                "                const traces = [];",
+                "                const layout = {",
+                "                    height: Math.max(420, forecastCategories.length * 240),",
+                "                    showlegend: true,",
+                "                    legend: { orientation: 'h', x: 0, y: 1.08 },",
+                "                    margin: { l: 60, r: 20, t: 24, b: 40 },",
+                "                    paper_bgcolor: '#f8f9fa',",
+                "                    plot_bgcolor: '#ffffff'",
+                "                };",
+                "",
+                "                forecastCategories.forEach((category, index) => {",
+                "                    const axisId = index + 1;",
+                "                    const axisSuffix = axisId === 1 ? '' : String(axisId);",
+                "                    const xAxisName = axisId === 1 ? 'x' : `x${axisId}`;",
+                "                    const yAxisName = axisId === 1 ? 'y' : `y${axisId}`;",
+                "                    const item = forecastData[category] || {};",
+                "                    const historyDates = item.history_dates || [];",
+                "                    const historyAvg = item.history_avg || [];",
+                "                    const dates = item.dates || [];",
+                "                    const forecast = item.forecast || [];",
+                "                    const lower80 = item.lower_80 || [];",
+                "                    const upper80 = item.upper_80 || [];",
+                "                    const lower95 = item.lower_95 || [];",
+                "                    const upper95 = item.upper_95 || [];",
+                "                    const showLegend = index === 0;",
+                "",
+                "                    traces.push({",
+                "                        x: dates,",
+                "                        y: upper95,",
+                "                        mode: 'lines',",
+                "                        line: { color: 'rgba(255, 165, 0, 0)' },",
+                "                        hoverinfo: 'skip',",
+                "                        showlegend: false,",
+                "                        xaxis: xAxisName,",
+                "                        yaxis: yAxisName",
+                "                    });",
+                "                    traces.push({",
+                "                        x: dates,",
+                "                        y: lower95,",
+                "                        mode: 'lines',",
+                "                        line: { color: 'rgba(255, 165, 0, 0)' },",
+                "                        fill: 'tonexty',",
+                "                        fillcolor: 'rgba(255, 165, 0, 0.12)',",
+                "                        name: '95% CI',",
+                "                        showlegend: showLegend,",
+                "                        xaxis: xAxisName,",
+                "                        yaxis: yAxisName",
+                "                    });",
+                "",
+                "                    traces.push({",
+                "                        x: dates,",
+                "                        y: upper80,",
+                "                        mode: 'lines',",
+                "                        line: { color: 'rgba(255, 165, 0, 0)' },",
+                "                        hoverinfo: 'skip',",
+                "                        showlegend: false,",
+                "                        xaxis: xAxisName,",
+                "                        yaxis: yAxisName",
+                "                    });",
+                "                    traces.push({",
+                "                        x: dates,",
+                "                        y: lower80,",
+                "                        mode: 'lines',",
+                "                        line: { color: 'rgba(255, 165, 0, 0)' },",
+                "                        fill: 'tonexty',",
+                "                        fillcolor: 'rgba(255, 165, 0, 0.2)',",
+                "                        name: '80% CI',",
+                "                        showlegend: showLegend,",
+                "                        xaxis: xAxisName,",
+                "                        yaxis: yAxisName",
+                "                    });",
+                "",
+                "                    traces.push({",
+                "                        x: historyDates,",
+                "                        y: historyAvg,",
+                "                        mode: 'lines',",
+                "                        line: { color: '#1f77b4', width: 2 },",
+                "                        name: 'Historical avg',",
+                "                        showlegend: showLegend,",
+                "                        xaxis: xAxisName,",
+                "                        yaxis: yAxisName",
+                "                    });",
+                "                    traces.push({",
+                "                        x: dates,",
+                "                        y: forecast,",
+                "                        mode: 'lines',",
+                "                        line: { color: '#ff8c00', width: 2, dash: 'dash' },",
+                "                        name: 'Forecast',",
+                "                        showlegend: showLegend,",
+                "                        xaxis: xAxisName,",
+                "                        yaxis: yAxisName",
+                "                    });",
+                "",
+                "                    const xAxisConfig = {",
+                "                        type: 'date',",
+                "                        showgrid: true,",
+                "                        gridcolor: '#e5e7eb',",
+                "                        title: axisId === forecastCategories.length ? 'Date' : '',",
+                "                        showticklabels: axisId === forecastCategories.length",
+                "                    };",
+                "                    if (axisId > 1) {",
+                "                        xAxisConfig.matches = 'x';",
+                "                    }",
+                "                    layout[`xaxis${axisSuffix}`] = xAxisConfig;",
+                "                    layout[`yaxis${axisSuffix}`] = {",
+                "                        title: `${category} (KRW)`,",
+                "                        showgrid: true,",
+                "                        gridcolor: '#f1f5f9'",
+                "                    };",
+                "                });",
+                "",
+                "                Plotly.newPlot('priceForecastChart', traces, layout, {",
+                "                    responsive: true,",
+                "                    displayModeBar: false",
+                "                });",
+                "            } else {",
+                "                const forecastContainer = document.getElementById('priceForecastChart');",
+                "                if (forecastContainer) {",
+                "                    forecastContainer.innerHTML = '<div class=\"forecast-empty\">Forecast unavailable (need at least 21 days per category).</div>';",
+                "                }",
+                "            }",
+                "",
                 "            function filterDeals() {",
                 "                const categoryFilter = document.getElementById('categoryFilter').value;",
                 "                const platformFilter = document.getElementById('platformFilter').value;",
@@ -297,6 +661,92 @@ class HtmlReporter:
         )
 
         return "\n".join(html_parts)
+
+    def _build_forecast_data(self, deals: List[dict[str, Any]]) -> Dict[str, Dict[str, List[Any]]]:
+        parsed_deals: List[Deal] = []
+        for raw_deal in deals:
+            parsed = self._to_deal(raw_deal)
+            if parsed is not None:
+                parsed_deals.append(parsed)
+
+        if not parsed_deals:
+            return {}
+
+        result = forecast_category_prices(parsed_deals, top_n=5)
+        if not isinstance(result, dict):
+            return {}
+        return result
+
+    def _build_forecast_history(
+        self,
+        deals: List[dict[str, Any]],
+        categories: Set[str],
+    ) -> Dict[str, Dict[str, List[Any]]]:
+        if not categories:
+            return {}
+
+        grouped: Dict[str, Dict[date, List[float]]] = defaultdict(lambda: defaultdict(list))
+        for raw_deal in deals:
+            parsed = self._to_deal(raw_deal)
+            if parsed is None or parsed.category not in categories:
+                continue
+            grouped[parsed.category][parsed.collected_at.date()].append(parsed.price)
+
+        history: Dict[str, Dict[str, List[Any]]] = {}
+        for category in sorted(grouped):
+            day_map = grouped[category]
+            sorted_days = sorted(day_map)
+            averages: List[float] = []
+            for day in sorted_days:
+                day_values = day_map[day]
+                averages.append(sum(day_values) / len(day_values))
+            history[category] = {
+                "history_dates": [day.isoformat() for day in sorted_days],
+                "history_avg": averages,
+            }
+
+        return history
+
+    def _to_deal(self, raw_deal: dict[str, Any]) -> Optional[Deal]:
+        category_value = raw_deal.get("category")
+        if not isinstance(category_value, str):
+            return None
+        category = category_value.strip()
+        if not category:
+            return None
+
+        price_value = raw_deal.get("current_price")
+        if price_value is None:
+            price_value = raw_deal.get("price")
+        if price_value is None:
+            return None
+        try:
+            price = float(price_value)
+        except (TypeError, ValueError):
+            return None
+        if price <= 0:
+            return None
+
+        collected_at = self._parse_datetime(raw_deal.get("collected_at") or raw_deal.get("ts"))
+        if collected_at is None:
+            return None
+
+        return Deal(price=price, category=category, collected_at=collected_at)
+
+    def _parse_datetime(self, value: Any) -> Optional[datetime]:
+        if isinstance(value, datetime):
+            return value
+        if isinstance(value, str):
+            normalized = value.strip()
+            if not normalized:
+                return None
+            if normalized.endswith("Z"):
+                normalized = f"{normalized[:-1]}+00:00"
+            try:
+                return datetime.fromisoformat(normalized)
+            except ValueError:
+                return None
+        return None
 
 
 def generate_index_html(report_dir: Path) -> Path:

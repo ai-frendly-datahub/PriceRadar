@@ -39,3 +39,10 @@ class PriceEvent:
     saving_vs_avg: Optional[int]
     radar_score: float
     explanation: str
+
+
+@dataclass
+class Deal:
+    price: float
+    category: str
+    collected_at: datetime
