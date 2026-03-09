@@ -35,9 +35,22 @@ class FmkoreaCollector(BaseCollector):
             "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
         )
         self.timeout = int(config.get("timeout", 30))
-        self.request_delay = float(config.get("request_delay", 1.0))
+        self.request_delay = float(config.get("request_delay", 3.0))
         self.max_items = int(config.get("max_items", 200))
         self.max_pages = int(config.get("max_pages", 10))
+
+        # Initialize session with persistent cookies and headers
+        self.session = requests.Session()
+        self.session.headers.update(
+            {
+                "User-Agent": self.user_agent,
+                "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+                "Accept-Language": "ko-KR,ko;q=0.9,en;q=0.8",
+                "Accept-Encoding": "gzip, deflate, br",
+                "Connection": "keep-alive",
+                "Referer": self.base_url,
+            }
+        )
 
     def collect(self) -> list[RawItem]:
         """펨코 핫딜 게시판에서 상품 정보 수집"""
@@ -92,15 +105,13 @@ class FmkoreaCollector(BaseCollector):
     )
     def _fetch_html(self, url: str) -> Optional[str]:
         """HTTP 요청으로 HTML 가져오기"""
-        headers = {
-            "User-Agent": self.user_agent,
-            "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
-            "Accept-Language": "ko-KR,ko;q=0.9,en-US;q=0.8,en;q=0.7",
-            "Referer": self.board_url,
-        }
-
         try:
-            response = requests.get(url, headers=headers, timeout=self.timeout)
+            response = self.session.get(url, timeout=self.timeout)
+
+            if response.status_code == 430:
+                time.sleep(5)
+                raise requests.exceptions.HTTPError(f"Rate limited (430): {url}")
+
             response.raise_for_status()
             response.encoding = "utf-8"
             return response.text

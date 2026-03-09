@@ -145,7 +145,7 @@ def validate_discount_rate(discount_rate: Optional[float]) -> bool:
     return 0.0 <= discount_rate <= 1.0
 
 
-def validate_url_format(url: str | None) -> bool:
+def validate_url_format(url: Optional[str]) -> bool:
     """
     Validate if URL has valid format.
 

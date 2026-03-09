@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from datetime import datetime
-from typing import Any, Dict, List, Tuple
+from typing import Optional, Any, Dict, List, Tuple
 
 from dateutil import parser as date_parser
 
@@ -10,7 +10,7 @@ from .scoring import compute_radar_score
 from .storage import PriceStorage
 
 
-def run_pipeline(raw_snapshots: List[Dict[str, Any]], *, db_path, limit: int | None = None) -> Tuple[int, int, int]:
+def run_pipeline(raw_snapshots: List[Dict[str, Any]], *, db_path, limit: Optional[int] = None) -> Tuple[int, int, int]:
     """스냅샷 JSON 배열 → 정규화 → 스코어링 → DuckDB 저장."""
     normalized_products: Dict[str, Product] = {}
     snapshots: List[PriceSnapshot] = []
@@ -83,7 +83,7 @@ def _normalize_snapshot(item: Dict[str, Any]) -> Tuple[PriceSnapshot, Product]:
     return snapshot, product
 
 
-def _safe_int(value: Any) -> int | None:
+def _safe_int(value: Any) -> Optional[int]:
     if value is None:
         return None
     try:

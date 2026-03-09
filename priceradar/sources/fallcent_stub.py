@@ -9,7 +9,7 @@ Fallcent 페이지를 실제로 크롤링하기 전, 파싱 로직의 틀을 제
   - 결과를 pipeline.run_pipeline에 넘길 JSON 구조로 맞추면 됩니다.
 """
 
-from typing import List, Dict, Any
+from typing import Optional, List, Dict, Any
 
 from bs4 import BeautifulSoup  # type: ignore
 import requests
@@ -45,12 +45,12 @@ def fetch_fallcent_list(url: str) -> List[Dict[str, Any]]:
     return items
 
 
-def _parse_price(text: str) -> int | None:
+def _parse_price(text: str) -> Optional[int]:
     digits = "".join(ch for ch in text if ch.isdigit())
     return int(digits) if digits else None
 
 
-def _parse_pct(text: str) -> float | None:
+def _parse_pct(text: str) -> Optional[float]:
     digits = "".join(ch for ch in text if ch.isdigit() or ch in "-.")
     if not digits:
         return None

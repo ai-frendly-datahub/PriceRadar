@@ -5,8 +5,11 @@ Base collector 모듈 - 모든 수집기의 기본 인터페이스
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from datetime import datetime
-from typing import Any, Optional
+from typing import Any, Optional, Union
 
+import requests
+
+from priceradar.resilience import SourceCircuitBreakerManager
 from priceradar.validators import (
     validate_discount_rate,
     validate_price_range,
@@ -18,30 +21,26 @@ from priceradar.validators import (
 class RawItem:
     """수집한 원시 데이터 아이템"""
 
-    product_id: str  # 상품 고유 ID
-    title: str  # 상품명
-    url: str  # 상품 URL
-    source: str  # 데이터 소스 (예: fallcent_main)
+    product_id: str
+    title: str
+    url: str
+    source: str
     collected_at: datetime = field(default_factory=datetime.now)
 
-    # 가격 정보
-    current_price: Optional[int] = None  # 현재 가격
-    avg_price: Optional[int] = None  # 평균 가격
-    list_price: Optional[int] = None  # 정가
-    discount_rate: Optional[float] = None  # 할인율
+    current_price: Optional[int] = None
+    avg_price: Optional[int] = None
+    list_price: Optional[int] = None
+    discount_rate: Optional[float] = None
 
-    # 메타데이터
-    category: Optional[str] = None  # 카테고리
-    platform: Optional[str] = None  # 쇼핑몰 (coupang, naver 등)
-    image_url: Optional[str] = None  # 이미지 URL
-    brand: Optional[str] = None  # 브랜드
+    category: Optional[str] = None
+    platform: Optional[str] = None
+    image_url: Optional[str] = None
+    brand: Optional[str] = None
 
-    # 추가 정보
-    is_hotdeal: bool = False  # 핫딜 여부
-    is_popular: bool = False  # 인기 상품 여부
-    is_lowest_now: bool = False  # 현재 최저가 여부
+    is_hotdeal: bool = False
+    is_popular: bool = False
+    is_lowest_now: bool = False
 
-    # 원시 데이터
     raw_data: dict[str, Any] = field(default_factory=dict)
 
 
@@ -51,6 +50,62 @@ class BaseCollector(ABC):
     def __init__(self, source_id: str, config: dict[str, Any]) -> None:
         self.source_id = source_id
         self.config = config
+        self.breaker_manager = SourceCircuitBreakerManager()
+
+    def _resolve_source_name(self) -> str:
+        source_name = self.config.get("name")
+        if isinstance(source_name, str) and source_name:
+            return source_name
+        return self.source_id
+
+    def _resolve_timeout(self) -> float:
+        timeout = self.config.get("timeout", 30)
+        if isinstance(timeout, (int, float)):
+            return float(timeout)
+        return 30.0
+
+    def _fetch(self, url: str) -> requests.Response:
+        source_name = self._resolve_source_name()
+        breaker = self.breaker_manager.get_breaker(source_name)
+
+        def _fetch_impl() -> requests.Response:
+            response = requests.get(url, timeout=self._resolve_timeout())
+            response.raise_for_status()
+            return response
+
+        return breaker.call(
+            lambda source=source_name: _fetch_impl(),
+            source=source_name,
+        )
+
+    def _fetch_html(self, url: str) -> Optional[str]:
+        source_name = self._resolve_source_name()
+        breaker = self.breaker_manager.get_breaker(source_name)
+
+        def _fetch_html_impl() -> Optional[str]:
+            response = requests.get(url, timeout=self._resolve_timeout())
+            response.raise_for_status()
+            response.encoding = response.apparent_encoding or "utf-8"
+            return response.text
+
+        return breaker.call(
+            lambda source=source_name: _fetch_html_impl(),
+            source=source_name,
+        )
+
+    def _fetch_json(self, url: str) -> Union[dict[str, Any], list[Any]]:
+        source_name = self._resolve_source_name()
+        breaker = self.breaker_manager.get_breaker(source_name)
+
+        def _fetch_json_impl() -> Union[dict[str, Any], list[Any]]:
+            response = requests.get(url, timeout=self._resolve_timeout())
+            response.raise_for_status()
+            return response.json()
+
+        return breaker.call(
+            lambda source=source_name: _fetch_json_impl(),
+            source=source_name,
+        )
 
     @abstractmethod
     def collect(self) -> list[RawItem]:
@@ -58,15 +113,6 @@ class BaseCollector(ABC):
         pass
 
     def validate_item(self, item: RawItem) -> bool:
-        """
-        수집한 아이템의 유효성을 검증.
-
-        검증 항목:
-        - 필수 필드: product_id, title, url
-        - URL 형식 유효성
-        - 가격 범위 (100원 ~ 10억 원)
-        - 할인율 범위 (0.0 ~ 1.0)
-        """
         if not item.product_id or not item.title or not item.url:
             return False
 

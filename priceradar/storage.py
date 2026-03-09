@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Iterable
+from typing import Optional, Iterable
 
 import duckdb
 
@@ -103,7 +103,7 @@ class PriceStorage:
                 ],
             )
 
-    def _find_duplicate_product(self, product: Product) -> str | None:
+    def _find_duplicate_product(self, product: Product) -> Optional[str]:
         """
         Find existing product that is a duplicate of the given product.
 

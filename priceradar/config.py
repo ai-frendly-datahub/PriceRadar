@@ -4,7 +4,7 @@ import os
 import re
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, cast
+from typing import Optional, Any, cast
 
 import yaml
 
@@ -16,7 +16,7 @@ class Settings:
     database_path: Path
 
 
-def load_settings(*, db_path_override: Path | None = None) -> Settings:
+def load_settings(*, db_path_override: Optional[Path] = None) -> Settings:
     db_path_env = os.environ.get("PRICERADAR_DB_PATH")
     db_path = (
         Path(db_path_env) if db_path_env else (db_path_override or Path("data/priceradar.duckdb"))

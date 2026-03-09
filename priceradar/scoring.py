@@ -20,7 +20,7 @@ def compute_radar_score(
     is_new_low: bool,
     popularity_hint: float = 0.0,
     volatility_hint: Optional[float] = None,
-    config: ScoreConfig | None = None,
+    config: Optional[ScoreConfig] = None,
 ) -> PriceEvent:
     cfg = config or ScoreConfig()
 

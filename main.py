@@ -15,7 +15,7 @@ import time
 from dataclasses import asdict
 from datetime import datetime
 from pathlib import Path
-from typing import Any
+from typing import Optional, Any
 
 import yaml
 
@@ -46,7 +46,7 @@ def load_sources(sources_path: str = "config/sources.yaml") -> dict[str, Any]:
 def run_collection(
     config: dict[str, Any],
     sources_config: dict[str, Any],
-    notifier: Notifier | None = None,
+    notifier: Optional[Notifier] = None,
 ) -> None:
     """데이터 수집 실행"""
     print("\n=== 데이터 수집 시작 ===")
@@ -149,7 +149,7 @@ def _raw_item_to_record(item: RawItem) -> dict[str, Any]:
     return record
 
 
-def _build_search_body(platform: str | None, category: str | None, brand: str | None) -> str:
+def _build_search_body(platform: Optional[str], category: Optional[str], brand: Optional[str]) -> str:
     return " ".join(part for part in [platform, category, brand] if part)
 
 
@@ -261,7 +261,7 @@ def run_scoring(config: dict[str, Any]) -> None:
     print(f"스코어링 완료: 총 {total_scored}개 상품 ({elapsed:.2f}초)")
 
 
-def generate_report(config: dict[str, Any], output_dir: str | None = None) -> None:
+def generate_report(config: dict[str, Any], output_dir: Optional[str] = None) -> None:
     """HTML 리포트 생성"""
     print("\n=== 리포트 생성 시작 ===")
 
@@ -300,7 +300,7 @@ def run_once(
     config: dict[str, Any],
     sources_config: dict[str, Any],
     generate_report_flag: bool = False,
-    notifier: Notifier | None = None,
+    notifier: Optional[Notifier] = None,
 ) -> None:
     """1회 실행"""
     print("\n" + "=" * 60)
@@ -340,7 +340,7 @@ def run_scheduler(
     config: dict[str, Any],
     sources_config: dict[str, Any],
     interval_hours: int = 24,
-    notifier: Notifier | None = None,
+    notifier: Optional[Notifier] = None,
 ) -> None:
     """주기적 실행"""
     print(f"스케줄러 시작 ({interval_hours}시간 간격)")
