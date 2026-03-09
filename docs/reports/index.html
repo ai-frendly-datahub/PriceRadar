@@ -3,10 +3,10 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>PriceRadar - 일일 가격 리포트</title>
+    <title>PriceRadar - 일일 리포트</title>
     <style>
         body {
-            font-family: Arial, sans-serif;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
             max-width: 1200px;
             margin: 0 auto;
             padding: 20px;
@@ -68,6 +68,12 @@
             color: white;
             margin-left: 10px;
         }
+        .footer {
+            text-align: center;
+            color: #999;
+            font-size: 12px;
+            margin-top: 30px;
+        }
     </style>
 </head>
 <body>
@@ -77,20 +83,32 @@
     </div>
 
     <div class="reports-container">
-        <h2>📊 일일 리포트</h2>
-        <ul class="report-list" id="reportList">
+        <h2>📊 일일 리포트 (3개)</h2>
+        <ul class="report-list">
+            
+            <li class="report-item">
+                <a href="2026-03-07/index.html" class="report-date">2026-03-07</a>
+                <span class="badge">최신</span>
+                <div class="report-meta">일일 리포트</div>
+            </li>
+        
+            <li class="report-item">
+                <a href="2026-03-05/index.html" class="report-date">2026-03-05</a>
+                
+                <div class="report-meta">일일 리포트</div>
+            </li>
+        
             <li class="report-item">
                 <a href="2025-11-24/index.html" class="report-date">2025-11-24</a>
-                <span class="badge">최신</span>
-                <div class="report-meta">100개 상품 | 15개 카테고리 | 4개 플랫폼</div>
+                
+                <div class="report-meta">일일 리포트</div>
             </li>
+        
         </ul>
     </div>
-
-    <script>
-        // 자동으로 날짜별 리포트 목록 생성
-        // GitHub Pages에서는 디렉토리 목록을 가져올 수 없으므로
-        // 수동으로 업데이트하거나 별도 스크립트로 생성 필요
-    </script>
+    
+    <div class="footer">
+        자동 생성됨 · 최종 업데이트: 2026-03-09 23:17
+    </div>
 </body>
 </html>
