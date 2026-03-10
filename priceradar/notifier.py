@@ -344,3 +344,53 @@ def _normalize_discount_rate_percent(discount_rate: Optional[float]) -> Optional
     if discount_rate <= 1:
         return discount_rate * 100.0
     return discount_rate
+
+
+class PipelineNotifier:
+    """Concrete notifier that wraps NotificationConfig and delegates to channel notifiers."""
+
+    def __init__(self, config: "NotificationConfig") -> None:
+        self.config = config
+        self._notifiers: list[object] = []
+        if not config.enabled:
+            return
+        if "email" in config.channels and config.email_settings:
+            es = config.email_settings
+            self._notifiers.append(
+                EmailNotifier(
+                    smtp_host=es.get("smtp_host", ""),
+                    smtp_port=int(es.get("smtp_port", 587)),
+                    smtp_user=es.get("smtp_user", ""),
+                    smtp_password=es.get("smtp_password", ""),
+                    from_addr=es.get("from_addr", ""),
+                    to_addrs=es.get("to_addrs", []),
+                )
+            )
+        if "webhook" in config.channels and config.webhook_url:
+            self._notifiers.append(WebhookNotifier(url=config.webhook_url))
+
+    def send(
+        self,
+        *,
+        title: str,
+        message: str,
+        priority: str = "normal",
+        metadata: Optional[dict[str, Any]] = None,
+    ) -> bool:
+        if not self.config.enabled or not self._notifiers:
+            return True
+        payload = NotificationPayload(
+            category_name=title,
+            sources_count=0,
+            collected_count=0,
+            matched_count=0,
+            errors_count=0,
+            timestamp=datetime.now(),
+        )
+        composite = CompositeNotifier(self._notifiers)
+        return composite.send(payload)
+
+
+def create_notifier(config: "NotificationConfig") -> "PipelineNotifier":
+    """Factory function to create a PipelineNotifier from NotificationConfig."""
+    return PipelineNotifier(config)

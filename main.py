@@ -24,7 +24,7 @@ from priceradar.collectors.registry import CollectorRegistry
 from priceradar.collectors.base import RawItem
 from priceradar.config import load_notification_config
 from priceradar.graph.graph_store import GraphStore
-from priceradar.notifier import Notifier, detect_price_notifications
+from priceradar.notifier import Notifier, PipelineNotifier, detect_price_notifications
 from priceradar.raw_logger import RawLogger
 from priceradar.reporters.html_reporter import HtmlReporter
 from priceradar.search_index import SearchIndex
@@ -394,7 +394,7 @@ def main() -> None:
     config = load_config(args.config)
     sources_config = load_sources(args.sources)
     notification_config = load_notification_config(Path(args.notifications))
-    notifier = Notifier(notification_config)
+    notifier = PipelineNotifier(notification_config)
 
     # 모드별 실행
     if args.mode == "once":
