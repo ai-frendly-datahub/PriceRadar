@@ -292,7 +292,7 @@ class HtmlReporter:
         )
 
         # Serialize deals to JSON
-        deals_json = json.dumps(deals)
+        deals_json = json.dumps(deals, default=lambda o: o.isoformat() if isinstance(o, (datetime, date)) else str(o))
         html_parts.append(deals_json)
         html_parts.append("        </script>")
 
