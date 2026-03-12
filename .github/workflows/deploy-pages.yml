@@ -31,3 +31,17 @@ jobs:
           user_name: github-actions[bot]
           user_email: github-actions[bot]@users.noreply.github.com
           commit_message: "docs: update priceradar reports"
+
+      - name: Notify on failure
+        if: failure()
+        run: |
+          curl -s -X POST "${{ secrets.NOTIFICATION_WEBHOOK_URL }}" \
+            -H "Content-Type: application/json" \
+            -d '{
+              "repo": "${{ github.repository }}",
+              "workflow": "${{ github.workflow }}",
+              "run_id": "${{ github.run_id }}",
+              "run_url": "${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}",
+              "status": "failure",
+              "timestamp": "${{ github.event.head_commit.timestamp }}"
+            }' || true
