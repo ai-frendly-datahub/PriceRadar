@@ -22,9 +22,7 @@ class HtmlCollector(BaseCollector):
         super().__init__(source_id, config)
         self.url = config.get("url", "")
         self.selectors = config.get("selectors", {})
-        self.user_agent = config.get(
-            "user_agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"
-        )
+        self.user_agent = config.get("user_agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64)")
         self.timeout = config.get("timeout", 30)
 
     def collect(self) -> list[RawItem]:
@@ -46,8 +44,7 @@ class HtmlCollector(BaseCollector):
         headers = {"User-Agent": self.user_agent}
 
         try:
-            response = requests.get(url, headers=headers, timeout=self.timeout)
-            response.raise_for_status()
+            response = self._request("GET", url, headers=headers, timeout=self.timeout)
             response.encoding = response.apparent_encoding
             return response.text
         except Exception as e:

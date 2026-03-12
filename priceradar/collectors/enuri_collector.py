@@ -167,13 +167,13 @@ class EnuriCollector(BaseCollector):
             "max": self.best_goods_max,
         }
 
-        response = requests.get(
+        response = self._request(
+            "GET",
             self.best_goods_api_url,
             headers=headers,
             params=params,
             timeout=self.timeout,
         )
-        response.raise_for_status()
 
         payload = response.json()
         if not isinstance(payload, dict):
@@ -243,8 +243,7 @@ class EnuriCollector(BaseCollector):
         }
 
         try:
-            response = requests.get(url, headers=headers, timeout=self.timeout)
-            response.raise_for_status()
+            response = self._request("GET", url, headers=headers, timeout=self.timeout)
             response.encoding = "utf-8"
             return response.text
         except Exception as e:

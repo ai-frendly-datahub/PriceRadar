@@ -100,8 +100,7 @@ class DealbadaCollector(BaseCollector):
         }
 
         try:
-            response = requests.get(url, headers=headers, timeout=self.timeout)
-            response.raise_for_status()
+            response = self._request("GET", url, headers=headers, timeout=self.timeout)
             response.encoding = "utf-8"
             return response.text
         except Exception as e:
@@ -133,7 +132,9 @@ class DealbadaCollector(BaseCollector):
         product_id = f"dealbada_{deal_id}"
 
         current_price = self._extract_price(deal_elem.select_one("span.current-price, span.price"))
-        list_price = self._extract_price(deal_elem.select_one("span.list-price, span.original-price"))
+        list_price = self._extract_price(
+            deal_elem.select_one("span.list-price, span.original-price")
+        )
 
         discount_rate = None
         if current_price and list_price and list_price > 0:

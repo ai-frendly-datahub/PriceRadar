@@ -99,8 +99,7 @@ class RuliwebCollector(BaseCollector):
             "Accept-Language": "ko-KR,ko;q=0.9,en-US;q=0.8,en;q=0.7",
         }
 
-        response = requests.get(url, headers=headers, timeout=self.timeout)
-        response.raise_for_status()
+        response = self._request("GET", url, headers=headers, timeout=self.timeout)
         response.encoding = "utf-8"
         return response.text
 

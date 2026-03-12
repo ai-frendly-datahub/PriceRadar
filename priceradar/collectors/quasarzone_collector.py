@@ -128,8 +128,7 @@ class QuasarzoneCollector(BaseCollector):
             "Referer": self.base_url,
         }
 
-        response = requests.get(page_url, headers=headers, timeout=self.timeout)
-        response.raise_for_status()
+        response = self._request("GET", page_url, headers=headers, timeout=self.timeout)
         response.encoding = "utf-8"
         return response.text
 
