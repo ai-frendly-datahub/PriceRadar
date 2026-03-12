@@ -3,7 +3,7 @@ GraphStore - DuckDB 기반 데이터 저장 및 조회
 """
 
 import os
-from datetime import datetime
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any, Optional
 
@@ -362,6 +362,23 @@ class GraphStore:
             "total_scores": total_scores,
             "categories": {cat: count for cat, count in categories},
         }
+
+    def delete_older_than(self, days: int) -> int:
+        cutoff = datetime.now(timezone.utc).replace(tzinfo=None) - timedelta(days=days)
+        snaps_row = self.conn.execute(
+            "SELECT COUNT(*) FROM price_snapshots WHERE ts < ?", [cutoff]
+        ).fetchone()
+        to_delete = int(snaps_row[0]) if snaps_row else 0
+        self.conn.execute("DELETE FROM price_scores WHERE ts < ?", [cutoff])
+        self.conn.execute("DELETE FROM price_snapshots WHERE ts < ?", [cutoff])
+        self.conn.execute(
+            """
+            DELETE FROM products
+            WHERE product_id NOT IN (SELECT DISTINCT product_id FROM price_snapshots)
+            AND product_id NOT IN (SELECT DISTINCT product_id FROM price_scores)
+            """
+        )
+        return to_delete
 
     def close(self) -> None:
         """DB 연결 종료"""

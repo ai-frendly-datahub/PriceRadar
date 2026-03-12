@@ -4,6 +4,7 @@ HTML Reporter - Jinja2 기반 가격 레이다 리포트 생성
 
 import json
 import os
+import shutil
 from collections import defaultdict
 from datetime import date, datetime
 from pathlib import Path
@@ -52,8 +53,8 @@ class HtmlReporter:
         Returns:
             생성된 HTML 파일 경로
         """
-        # 출력 디렉터리 생성
-        os.makedirs(os.path.dirname(output_path), exist_ok=True)
+        output_file = Path(output_path)
+        output_file.parent.mkdir(parents=True, exist_ok=True)
 
         forecast_data = self._build_forecast_data(deals)
 
@@ -70,11 +71,28 @@ class HtmlReporter:
                 forecast_data=forecast_data,
             )
 
-        # 파일 저장
-        with open(output_path, "w", encoding="utf-8") as f:
-            f.write(html_content)
+        date_stamp = datetime.now().strftime("%Y%m%d")
+        category_name = output_file.stem or "price_report"
+        dated_output = output_file.parent / f"{category_name}_{date_stamp}.html"
 
-        return output_path
+        with dated_output.open("w", encoding="utf-8") as file_obj:
+            file_obj.write(html_content)
+
+        if dated_output != output_file:
+            shutil.copy2(dated_output, output_file)
+
+        self._copy_static_assets(output_file.parent)
+
+        return str(output_file)
+
+    def _copy_static_assets(self, report_dir: Path) -> None:
+        static_src = Path(self.template_dir) / "static"
+        static_dst = report_dir / "static"
+        if not static_src.is_dir():
+            return
+        if static_dst.exists():
+            shutil.rmtree(static_dst)
+        shutil.copytree(static_src, static_dst)
 
     def _generate_basic_html(
         self,
@@ -292,7 +310,9 @@ class HtmlReporter:
         )
 
         # Serialize deals to JSON
-        deals_json = json.dumps(deals, default=lambda o: o.isoformat() if isinstance(o, (datetime, date)) else str(o))
+        deals_json = json.dumps(
+            deals, default=lambda o: o.isoformat() if isinstance(o, (datetime, date)) else str(o)
+        )
         html_parts.append(deals_json)
         html_parts.append("        </script>")
 
