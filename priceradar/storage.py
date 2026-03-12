@@ -7,6 +7,7 @@ from typing import Optional, Iterable
 
 import duckdb
 
+from .exceptions import StorageError
 from .models import PriceEvent, PriceSnapshot, Product
 from .validators import detect_duplicate_products, normalize_title
 
@@ -76,32 +77,47 @@ class PriceStorage:
         Detects duplicates based on normalized title and URL similarity.
         If a duplicate is found, the existing product is updated instead of creating a new one.
         """
-        for p in products:
-            existing_duplicate = self._find_duplicate_product(p)
+        try:
+            self.conn.execute("BEGIN TRANSACTION")
+            for p in products:
+                existing_duplicate = self._find_duplicate_product(p)
 
-            if existing_duplicate:
-                product_id = existing_duplicate
-            else:
-                product_id = p.id
+                if existing_duplicate:
+                    product_id = existing_duplicate
+                else:
+                    product_id = p.id
 
-            attr_json = json.dumps(p.attributes, ensure_ascii=False) if p.attributes else None
-            self.conn.execute("DELETE FROM products WHERE id = ?", [product_id])
-            self.conn.execute(
-                """
-                INSERT INTO products (id, title, category, brand, source_platform, product_url, image_url, attributes_json)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-                """,
-                [
-                    product_id,
-                    p.title,
-                    p.category,
-                    p.brand,
-                    p.source_platform,
-                    p.product_url,
-                    p.image_url,
-                    attr_json,
-                ],
-            )
+                attr_json = json.dumps(p.attributes, ensure_ascii=False) if p.attributes else None
+                self.conn.execute(
+                    """
+                    INSERT INTO products (
+                        id, title, category, brand, source_platform, product_url, image_url, attributes_json
+                    )
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                    ON CONFLICT (id) DO UPDATE SET
+                        title = EXCLUDED.title,
+                        category = EXCLUDED.category,
+                        brand = EXCLUDED.brand,
+                        source_platform = EXCLUDED.source_platform,
+                        product_url = EXCLUDED.product_url,
+                        image_url = EXCLUDED.image_url,
+                        attributes_json = EXCLUDED.attributes_json
+                    """,
+                    [
+                        product_id,
+                        p.title,
+                        p.category,
+                        p.brand,
+                        p.source_platform,
+                        p.product_url,
+                        p.image_url,
+                        attr_json,
+                    ],
+                )
+            self.conn.execute("COMMIT")
+        except duckdb.Error as exc:
+            self.conn.execute("ROLLBACK")
+            raise StorageError(f"Failed to upsert products: {exc}") from exc
 
     def _find_duplicate_product(self, product: Product) -> Optional[str]:
         """
@@ -129,50 +145,62 @@ class PriceStorage:
 
     def insert_snapshots(self, snapshots: Iterable[PriceSnapshot]) -> int:
         count = 0
-        for s in snapshots:
-            meta_json = json.dumps(s.meta, ensure_ascii=False) if s.meta else None
-            self.conn.execute(
-                """
-                INSERT INTO price_snapshots (
-                    product_id, ts, price, avg_price_30d, avg_price_90d,
-                    discount_rate_vs_avg, discount_rate_vs_list, source, meta_json
+        try:
+            self.conn.execute("BEGIN TRANSACTION")
+            for s in snapshots:
+                meta_json = json.dumps(s.meta, ensure_ascii=False) if s.meta else None
+                self.conn.execute(
+                    """
+                    INSERT INTO price_snapshots (
+                        product_id, ts, price, avg_price_30d, avg_price_90d,
+                        discount_rate_vs_avg, discount_rate_vs_list, source, meta_json
+                    )
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    """,
+                    [
+                        s.product_id,
+                        _utc_naive(s.ts),
+                        s.price,
+                        s.avg_price_30d,
+                        s.avg_price_90d,
+                        s.discount_rate_vs_avg,
+                        s.discount_rate_vs_list,
+                        s.source,
+                        meta_json,
+                    ],
                 )
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-                """,
-                [
-                    s.product_id,
-                    _utc_naive(s.ts),
-                    s.price,
-                    s.avg_price_30d,
-                    s.avg_price_90d,
-                    s.discount_rate_vs_avg,
-                    s.discount_rate_vs_list,
-                    s.source,
-                    meta_json,
-                ],
-            )
-            count += 1
-        return count
+                count += 1
+            self.conn.execute("COMMIT")
+            return count
+        except duckdb.Error as exc:
+            self.conn.execute("ROLLBACK")
+            raise StorageError(f"Failed to insert price snapshots: {exc}") from exc
 
     def insert_events(self, events: Iterable[PriceEvent]) -> int:
         count = 0
-        for e in events:
-            self.conn.execute(
-                """
-                INSERT INTO price_events (
-                    product_id, event_ts, event_type, drop_rate, saving_vs_avg, radar_score, explanation
+        try:
+            self.conn.execute("BEGIN TRANSACTION")
+            for e in events:
+                self.conn.execute(
+                    """
+                    INSERT INTO price_events (
+                        product_id, event_ts, event_type, drop_rate, saving_vs_avg, radar_score, explanation
+                    )
+                    VALUES (?, ?, ?, ?, ?, ?, ?)
+                    """,
+                    [
+                        e.product_id,
+                        _utc_naive(e.event_ts),
+                        e.event_type,
+                        e.drop_rate,
+                        e.saving_vs_avg,
+                        e.radar_score,
+                        e.explanation,
+                    ],
                 )
-                VALUES (?, ?, ?, ?, ?, ?, ?)
-                """,
-                [
-                    e.product_id,
-                    _utc_naive(e.event_ts),
-                    e.event_type,
-                    e.drop_rate,
-                    e.saving_vs_avg,
-                    e.radar_score,
-                    e.explanation,
-                ],
-            )
-            count += 1
-        return count
+                count += 1
+            self.conn.execute("COMMIT")
+            return count
+        except duckdb.Error as exc:
+            self.conn.execute("ROLLBACK")
+            raise StorageError(f"Failed to insert price events: {exc}") from exc

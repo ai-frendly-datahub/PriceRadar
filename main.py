@@ -10,6 +10,7 @@ PriceRadar 메인 실행 스크립트
 from __future__ import annotations
 
 import argparse
+from concurrent.futures import ThreadPoolExecutor, as_completed
 import os
 import time
 from dataclasses import asdict
@@ -21,10 +22,10 @@ import yaml
 
 from priceradar.analyzers.price_scorer import PriceScorer
 from priceradar.collectors.registry import CollectorRegistry
-from priceradar.collectors.base import RawItem
+from priceradar.collectors.base import RawItem, resolve_max_workers
 from priceradar.config import load_notification_config
 from priceradar.graph.graph_store import GraphStore
-from priceradar.notifier import Notifier, PipelineNotifier, detect_price_notifications
+from priceradar.notifier import PipelineNotifier, detect_price_notifications
 from priceradar.raw_logger import RawLogger
 from priceradar.reporters.html_reporter import HtmlReporter
 from priceradar.search_index import SearchIndex
@@ -46,7 +47,8 @@ def load_sources(sources_path: str = "config/sources.yaml") -> dict[str, Any]:
 def run_collection(
     config: dict[str, Any],
     sources_config: dict[str, Any],
-    notifier: Optional[Notifier] = None,
+    notifier: Optional[PipelineNotifier] = None,
+    keep_days: int = 90,
 ) -> None:
     """데이터 수집 실행"""
     print("\n=== 데이터 수집 시작 ===")
@@ -64,75 +66,85 @@ def run_collection(
     # 중복 제거를 위한 URL 세트 (메모리 내)
     seen_urls = set()
 
-    for source in sources:
-        if not source.get("enabled", False):
-            continue
+    enabled_sources = [source for source in sources if source.get("enabled", False)]
+    workers = resolve_max_workers()
 
-        source_id = source.get("id")
-        print(f"\n[{source_id}] 수집 중...")
-
+    def _collect_source(source: dict[str, Any]) -> tuple[str, list[RawItem], Optional[str]]:
+        source_id = str(source.get("id", "unknown"))
         try:
-            # 수집기 생성
             collector = CollectorRegistry.create_collector(source)
-
-            # 데이터 수집
             items = collector.collect()
-            total_items_collected += len(items)
+            return source_id, items, None
+        except Exception as exc:
+            return source_id, [], str(exc)
 
-            validated_items: list[RawItem] = []
-            for item in items:
-                is_valid, errors = validate_article(item)
-                if not is_valid:
-                    print(f"[{source_id}] invalid item skipped: {'; '.join(errors)}")
-                    continue
-                validated_items.append(item)
+    if workers == 1:
+        source_results = [_collect_source(source) for source in enabled_sources]
+    else:
+        source_results = []
+        with ThreadPoolExecutor(max_workers=workers) as executor:
+            futures = [executor.submit(_collect_source, source) for source in enabled_sources]
+            for future in as_completed(futures):
+                source_results.append(future.result())
 
-            unique_items: list[RawItem] = []
-            for item in validated_items:
-                if item.url and item.url in seen_urls:
-                    continue
-                unique_items.append(item)
-
-            if notifier is not None and unique_items:
-                product_ids = [item.product_id for item in unique_items if item.product_id]
-                previous_states = _load_previous_product_states(store, product_ids)
-                events = detect_price_notifications(
-                    unique_items,
-                    previous_states=previous_states,
-                    rules=notifier.config.rules,
-                )
-                for event in events:
-                    notifier.send(
-                        title=event.title,
-                        message=event.message,
-                        priority=event.priority,
-                        metadata=event.metadata,
-                    )
-
-            raw_logger.log(
-                (_raw_item_to_record(item) for item in validated_items), source_name=source_id
-            )
-
-            # 중복 제거 후 저장
-            saved_count = 0
-            for item in unique_items:
-                store.save_raw_item(item)
-                search_index.upsert(
-                    link=item.url,
-                    title=item.title,
-                    body=_build_search_body(item.platform, item.category, item.brand),
-                )
-                if item.url:
-                    seen_urls.add(item.url)
-                saved_count += 1
-                total_items_saved += 1
-
-            print(f"[{source_id}] {len(validated_items)}개 아이템 수집 완료")
-
-        except Exception as e:
-            print(f"[{source_id}] 수집 실패: {e}")
+    for source_id, items, collect_error in source_results:
+        print(f"\n[{source_id}] 수집 중...")
+        if collect_error is not None:
+            print(f"[{source_id}] 수집 실패: {collect_error}")
             continue
 
+        total_items_collected += len(items)
+
+        validated_items: list[RawItem] = []
+        for item in items:
+            is_valid, errors = validate_article(item)
+            if not is_valid:
+                print(f"[{source_id}] invalid item skipped: {'; '.join(errors)}")
+                continue
+            validated_items.append(item)
+
+        unique_items: list[RawItem] = []
+        for item in validated_items:
+            if item.url and item.url in seen_urls:
+                continue
+            unique_items.append(item)
+
+        if notifier is not None and unique_items:
+            product_ids = [item.product_id for item in unique_items if item.product_id]
+            previous_states = _load_previous_product_states(store, product_ids)
+            events = detect_price_notifications(
+                unique_items,
+                previous_states=previous_states,
+                rules=notifier.config.rules,
+            )
+            for event in events:
+                notifier.send(
+                    title=event.title,
+                    message=event.message,
+                    priority=event.priority,
+                    metadata=event.metadata,
+                )
+
+        raw_logger.log(
+            (_raw_item_to_record(item) for item in validated_items), source_name=source_id
+        )
+
+        for item in unique_items:
+            store.save_raw_item(item)
+            search_index.upsert(
+                link=item.url,
+                title=item.title,
+                body=_build_search_body(item.platform, item.category, item.brand),
+            )
+            if item.url:
+                seen_urls.add(item.url)
+            total_items_saved += 1
+
+        print(f"[{source_id}] {len(validated_items)}개 아이템 수집 완료")
+
+    deleted = store.delete_older_than(keep_days)
+    if deleted:
+        print(f"보존 기간 초과 스냅샷 삭제: {deleted}개")
     store.close()
 
     elapsed = time.time() - start_time
@@ -149,7 +161,9 @@ def _raw_item_to_record(item: RawItem) -> dict[str, Any]:
     return record
 
 
-def _build_search_body(platform: Optional[str], category: Optional[str], brand: Optional[str]) -> str:
+def _build_search_body(
+    platform: Optional[str], category: Optional[str], brand: Optional[str]
+) -> str:
     return " ".join(part for part in [platform, category, brand] if part)
 
 
@@ -279,10 +293,7 @@ def generate_report(config: dict[str, Any], output_dir: Optional[str] = None) ->
         output_dir = str(config.get("reporting", {}).get("output_path", "docs/reports"))
 
     today = datetime.now().strftime("%Y-%m-%d")
-    report_dir = os.path.join(output_dir, today)
-    os.makedirs(report_dir, exist_ok=True)
-
-    report_path = os.path.join(report_dir, "index.html")
+    report_path = os.path.join(output_dir, "price_report.html")
 
     reporter = HtmlReporter()
     reporter.generate_report(
@@ -300,7 +311,8 @@ def run_once(
     config: dict[str, Any],
     sources_config: dict[str, Any],
     generate_report_flag: bool = False,
-    notifier: Optional[Notifier] = None,
+    notifier: Optional[PipelineNotifier] = None,
+    keep_days: int = 90,
 ) -> None:
     """1회 실행"""
     print("\n" + "=" * 60)
@@ -308,7 +320,7 @@ def run_once(
     print("=" * 60)
 
     # 1. 데이터 수집
-    run_collection(config, sources_config, notifier)
+    run_collection(config, sources_config, notifier, keep_days=keep_days)
 
     # 2. 스코어링
     run_scoring(config)
@@ -340,7 +352,7 @@ def run_scheduler(
     config: dict[str, Any],
     sources_config: dict[str, Any],
     interval_hours: int = 24,
-    notifier: Optional[Notifier] = None,
+    notifier: Optional[PipelineNotifier] = None,
 ) -> None:
     """주기적 실행"""
     print(f"스케줄러 시작 ({interval_hours}시간 간격)")
@@ -387,6 +399,12 @@ def main() -> None:
         default="config/notifications.yaml",
         help="알림 설정 파일 경로",
     )
+    parser.add_argument(
+        "--keep-days",
+        type=int,
+        default=90,
+        help="보존 기간 (일 단위, 기본값: 90)",
+    )
 
     args = parser.parse_args()
 
@@ -398,7 +416,13 @@ def main() -> None:
 
     # 모드별 실행
     if args.mode == "once":
-        run_once(config, sources_config, generate_report_flag=args.report, notifier=notifier)
+        run_once(
+            config,
+            sources_config,
+            generate_report_flag=args.report,
+            notifier=notifier,
+            keep_days=args.keep_days,
+        )
     elif args.mode == "scheduler":
         run_scheduler(config, sources_config, interval_hours=args.interval, notifier=notifier)
 
