@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Optional, Iterable
+from typing import Iterable, Optional
 
 import duckdb
 
@@ -204,3 +204,15 @@ class PriceStorage:
         except duckdb.Error as exc:
             self.conn.execute("ROLLBACK")
             raise StorageError(f"Failed to insert price events: {exc}") from exc
+
+    def create_daily_snapshot(self, snapshot_dir: Optional[str] = None) -> Optional[Path]:
+        from .date_storage import snapshot_database
+
+        snapshot_root = Path(snapshot_dir) if snapshot_dir else self.db_path.parent / "daily"
+        return snapshot_database(self.db_path, snapshot_root=snapshot_root)
+
+    def cleanup_old_snapshots(self, snapshot_dir: Optional[str] = None, keep_days: int = 90) -> int:
+        from .date_storage import cleanup_date_directories
+
+        snapshot_root = Path(snapshot_dir) if snapshot_dir else self.db_path.parent / "daily"
+        return cleanup_date_directories(snapshot_root, keep_days=keep_days)

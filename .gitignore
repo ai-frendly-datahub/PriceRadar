@@ -64,6 +64,7 @@ dmypy.json
 analyze_*.py
 test_*.py
 !tests/unit/forecasting/test_price_forecast.py
+!tests/unit/test_date_storage.py
 debug_*.py
 check_db.py
 find_*.py
@@ -86,6 +87,7 @@ secrets/
 
 # Generated workflow artifacts
 .sisyphus/
+data/daily/
 data/raw/
 !data/raw/.gitkeep
 data/search_index.db
