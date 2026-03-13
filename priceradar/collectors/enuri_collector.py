@@ -252,11 +252,23 @@ class EnuriCollector(BaseCollector):
             raise
 
     def _parse_js_data(self, soup: BeautifulSoup) -> list[RawItem]:
-        """JavaScript 데이터 객체에서 상품 정보 추출"""
+        """JavaScript 데이터 객체에서 상품 정보 추출
+
+        Validates that soup is a valid BeautifulSoup object before parsing.
+        """
         items: list[RawItem] = []
+
+        # BeautifulSoup 객체 유효성 검증
+        if soup is None:
+            print(f"[{self.source_id}] BeautifulSoup 객체가 None 입니다")
+            return items
 
         # <script> 태그들을 탐색하여 jsonPopGoods 찾기
         script_tags = soup.find_all("script")
+
+        if not script_tags:
+            print(f"[{self.source_id}] script 태그를 찾을 수 없습니다")
+            return items
 
         for script in script_tags:
             script_content = script.string or script.get_text()
@@ -382,39 +394,66 @@ class EnuriCollector(BaseCollector):
         return None
 
     def _parse_price(self, value: Any) -> int | None:
+        """Parse price value with robust error handling.
+
+        Returns None if parsing fails or value is invalid.
+        """
         if value is None:
             return None
 
-        raw_value = str(value).replace(",", "").strip()
-        if not raw_value:
-            return None
+        try:
+            raw_value = str(value).replace(",", "").strip()
+            if not raw_value:
+                return None
 
-        matched = re.search(r"\d+", raw_value)
-        if not matched:
-            return None
+            # 숫자만 추출
+            matched = re.search(r"\d+", raw_value)
+            if not matched:
+                return None
 
-        return int(matched.group(0))
+            price = int(matched.group(0))
+
+            # 유효성 체크: 0 이거나 음수인 경우 None 반환
+            if price <= 0:
+                return None
+
+            return price
+        except (TypeError, ValueError, AttributeError) as e:
+            print(f"[{self.source_id}] 가격 파싱 실패 ({value}): {e}")
+            return None
 
     def _parse_discount_rate(self, value: Any) -> float | None:
+        """Parse discount rate with robust error handling.
+
+        Returns None if parsing fails or value is invalid (outside 0-1 range).
+        Accepts both percentage (25) and decimal (0.25) formats.
+        """
         if value is None:
             return None
 
-        raw_value = str(value).strip()
-        if not raw_value:
+        try:
+            raw_value = str(value).strip()
+            if not raw_value:
+                return None
+
+            matched = re.search(r"\d+(?:\.\d+)?", raw_value)
+            if not matched:
+                return None
+
+            numeric_value = float(matched.group(0))
+
+            # 퍼센트 형식 (0-100) 이면 0-1 로 변환
+            if numeric_value > 1.0:
+                numeric_value = numeric_value / 100.0
+
+            # 유효성 체크: 0-1 범위여야 함
+            if numeric_value < 0.0 or numeric_value > 1.0:
+                return None
+
+            return numeric_value
+        except (TypeError, ValueError, AttributeError) as e:
+            print(f"[{self.source_id}] 할인율 파싱 실패 ({value}): {e}")
             return None
-
-        matched = re.search(r"\d+(?:\.\d+)?", raw_value)
-        if not matched:
-            return None
-
-        numeric_value = float(matched.group(0))
-        if numeric_value > 1.0:
-            numeric_value = numeric_value / 100.0
-
-        if numeric_value < 0.0 or numeric_value > 1.0:
-            return None
-
-        return numeric_value
 
     def _parse_product_from_json(self, product_data: dict[str, Any] | None) -> RawItem | None:
         """JSON 객체에서 RawItem 생성"""
