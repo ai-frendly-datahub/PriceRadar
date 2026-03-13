@@ -1,57 +1,56 @@
 """
-Unit tests for priceradar.validators module.
+Unit tests for radar.common.validators module.
 
 Tests cover:
 - Title normalization
 - URL similarity detection
-- Price range validation
-- Discount rate validation
 - URL format validation
-- Duplicate product detection
+- Duplicate article detection
+- Article validation
 """
 
 from __future__ import annotations
 
+from datetime import UTC, datetime
+
 import pytest
 
-from priceradar.validators import (
+from priceradar.common.validators import (
     detect_duplicate_articles,
-    detect_duplicate_products,
     is_similar_url,
     normalize_title,
     validate_article,
-    validate_discount_rate,
-    validate_price_range,
     validate_url_format,
 )
+from priceradar.models import Article
 
 
 class TestNormalizeTitle:
     """Tests for normalize_title function."""
 
     def test_normalize_basic_title(self) -> None:
-        result = normalize_title("Samsung Galaxy S24")
-        assert result == "samsung galaxy s24"
+        result = normalize_title("Breaking News")
+        assert result == "breaking news"
 
     def test_normalize_extra_whitespace(self) -> None:
-        result = normalize_title("  Samsung  Galaxy  S24  ")
-        assert result == "samsung galaxy s24"
+        result = normalize_title("  Breaking  News  ")
+        assert result == "breaking news"
 
     def test_normalize_with_parentheses(self) -> None:
-        result = normalize_title("iPhone 15 Pro (256GB)")
-        assert result == "iphone 15 pro 256gb"
+        result = normalize_title("Title (Updated)")
+        assert result == "title updated"
 
     def test_normalize_with_brackets(self) -> None:
-        result = normalize_title("Product [New Version]")
-        assert result == "product new version"
+        result = normalize_title("Article [New]")
+        assert result == "article new"
 
     def test_normalize_special_characters(self) -> None:
-        result = normalize_title("Product@#$%Name")
-        assert result == "productname"
+        result = normalize_title("Title@#$%Name")
+        assert result == "titlename"
 
     def test_normalize_with_hyphens(self) -> None:
-        result = normalize_title("Samsung Galaxy S24-Ultra")
-        assert result == "samsung galaxy s24-ultra"
+        result = normalize_title("Title-With-Hyphens")
+        assert result == "title-with-hyphens"
 
     def test_normalize_empty_string(self) -> None:
         result = normalize_title("")
@@ -62,133 +61,25 @@ class TestNormalizeTitle:
         assert result == ""
 
     def test_normalize_complex_title(self) -> None:
-        result = normalize_title("  Apple iPhone 15 Pro Max (512GB) [2024]  ")
-        assert result == "apple iphone 15 pro max 512gb 2024"
+        result = normalize_title("  Breaking News (Updated) [2024]  ")
+        assert result == "breaking news updated 2024"
 
     def test_normalize_korean_characters(self) -> None:
-        result = normalize_title("삼성 갤럭시 S24")
-        assert result == "삼성 갤럭시 s24"
-
-
-class TestIsSimilarUrl:
-    """Tests for is_similar_url function."""
-
-    def test_identical_urls(self) -> None:
-        url = "https://coupang.com/vp/products/123"
-        assert is_similar_url(url, url) is True
-
-    def test_same_domain_same_path(self) -> None:
-        url1 = "https://coupang.com/vp/products/123"
-        url2 = "https://coupang.com/vp/products/123?ref=abc"
-        assert is_similar_url(url1, url2) is True
-
-    def test_different_domains(self) -> None:
-        url1 = "https://coupang.com/vp/products/123"
-        url2 = "https://naver.com/vp/products/123"
-        assert is_similar_url(url1, url2) is False
-
-    def test_different_paths(self) -> None:
-        url1 = "https://coupang.com/vp/products/123"
-        url2 = "https://coupang.com/vp/products/456"
-        assert is_similar_url(url1, url2) is True
-
-    def test_similar_paths_high_threshold(self) -> None:
-        url1 = "https://coupang.com/vp/products/123"
-        url2 = "https://coupang.com/vp/products/124"
-        assert is_similar_url(url1, url2, threshold=0.95) is False
-
-    def test_similar_paths_low_threshold(self) -> None:
-        url1 = "https://coupang.com/vp/products/123"
-        url2 = "https://coupang.com/vp/products/124"
-        assert is_similar_url(url1, url2, threshold=0.5) is True
-
-    def test_invalid_url_format(self) -> None:
-        url1 = "not-a-url"
-        url2 = "https://coupang.com/vp/products/123"
-        assert is_similar_url(url1, url2) is False
-
-    def test_empty_urls(self) -> None:
-        assert is_similar_url("", "") is True
-
-    def test_url_with_fragments(self) -> None:
-        url1 = "https://coupang.com/vp/products/123"
-        url2 = "https://coupang.com/vp/products/123#section"
-        assert is_similar_url(url1, url2) is True
-
-
-class TestValidatePriceRange:
-    """Tests for validate_price_range function."""
-
-    def test_valid_price_middle_range(self) -> None:
-        assert validate_price_range(10000) is True
-
-    def test_valid_price_minimum(self) -> None:
-        assert validate_price_range(100) is True
-
-    def test_valid_price_maximum(self) -> None:
-        assert validate_price_range(1_000_000_000) is True
-
-    def test_invalid_price_below_minimum(self) -> None:
-        assert validate_price_range(50) is False
-
-    def test_invalid_price_above_maximum(self) -> None:
-        assert validate_price_range(2_000_000_000) is False
-
-    def test_none_price_is_valid(self) -> None:
-        assert validate_price_range(None) is True
-
-    def test_zero_price_is_invalid(self) -> None:
-        assert validate_price_range(0) is False
-
-    def test_negative_price_is_invalid(self) -> None:
-        assert validate_price_range(-1000) is False
-
-    def test_custom_min_price(self) -> None:
-        assert validate_price_range(500, min_price=1000) is False
-
-    def test_custom_max_price(self) -> None:
-        assert validate_price_range(500_000_000, max_price=100_000_000) is False
-
-
-class TestValidateDiscountRate:
-    """Tests for validate_discount_rate function."""
-
-    def test_valid_discount_zero(self) -> None:
-        assert validate_discount_rate(0.0) is True
-
-    def test_valid_discount_fifty_percent(self) -> None:
-        assert validate_discount_rate(0.5) is True
-
-    def test_valid_discount_hundred_percent(self) -> None:
-        assert validate_discount_rate(1.0) is True
-
-    def test_invalid_discount_above_one(self) -> None:
-        assert validate_discount_rate(1.5) is False
-
-    def test_invalid_discount_negative(self) -> None:
-        assert validate_discount_rate(-0.1) is False
-
-    def test_none_discount_is_valid(self) -> None:
-        assert validate_discount_rate(None) is True
-
-    def test_valid_discount_small_value(self) -> None:
-        assert validate_discount_rate(0.01) is True
-
-    def test_valid_discount_large_value(self) -> None:
-        assert validate_discount_rate(0.99) is True
+        result = normalize_title("속보 뉴스")
+        assert result == "속보 뉴스"
 
 
 class TestValidateUrlFormat:
     """Tests for validate_url_format function."""
 
     def test_valid_https_url(self) -> None:
-        assert validate_url_format("https://coupang.com/vp/products/123") is True
+        assert validate_url_format("https://example.com/article") is True
 
     def test_valid_http_url(self) -> None:
         assert validate_url_format("http://example.com") is True
 
     def test_invalid_url_no_scheme(self) -> None:
-        assert validate_url_format("coupang.com/vp/products/123") is False
+        assert validate_url_format("example.com/article") is False
 
     def test_invalid_url_no_domain(self) -> None:
         assert validate_url_format("https://") is False
@@ -200,91 +91,141 @@ class TestValidateUrlFormat:
         assert validate_url_format("not-a-url") is False
 
     def test_invalid_url_none_type(self) -> None:
-        assert validate_url_format(None) is False
+        assert validate_url_format(None) is False  # type: ignore
 
     def test_valid_url_with_query_params(self) -> None:
-        assert validate_url_format("https://coupang.com/vp/products/123?ref=abc") is True
+        assert validate_url_format("https://example.com/article?id=123") is True
 
     def test_valid_url_with_fragment(self) -> None:
-        assert validate_url_format("https://coupang.com/vp/products/123#section") is True
+        assert validate_url_format("https://example.com/article#section") is True
+
+    def test_valid_url_with_port(self) -> None:
+        assert validate_url_format("https://example.com:8080/article") is True
 
 
-class TestDetectDuplicateProducts:
-    """Tests for detect_duplicate_products function."""
+class TestIsSimilarUrl:
+    """Tests for is_similar_url function."""
 
-    def test_identical_products(self) -> None:
+    def test_identical_urls(self) -> None:
+        url = "https://example.com/article/123"
+        assert is_similar_url(url, url) is True
+
+    def test_same_domain_same_path(self) -> None:
+        url1 = "https://example.com/article/123"
+        url2 = "https://example.com/article/123?ref=abc"
+        assert is_similar_url(url1, url2) is True
+
+    def test_different_domains(self) -> None:
+        url1 = "https://example.com/article/123"
+        url2 = "https://other.com/article/123"
+        assert is_similar_url(url1, url2) is False
+
+    def test_different_paths_below_threshold(self) -> None:
+        url1 = "https://example.com/article/123"
+        url2 = "https://example.com/article/456"
+        # Paths are NOT similar enough (0.75 < 0.8 threshold)
+        assert is_similar_url(url1, url2) is False
+
+    def test_similar_paths_high_threshold(self) -> None:
+        url1 = "https://example.com/article/123"
+        url2 = "https://example.com/article/124"
+        assert is_similar_url(url1, url2, threshold=0.95) is False
+
+    def test_similar_paths_low_threshold(self) -> None:
+        url1 = "https://example.com/article/123"
+        url2 = "https://example.com/article/124"
+        assert is_similar_url(url1, url2, threshold=0.5) is True
+
+    def test_invalid_url_format(self) -> None:
+        url1 = "not-a-url"
+        url2 = "https://example.com/article/123"
+        assert is_similar_url(url1, url2) is False
+
+    def test_empty_urls(self) -> None:
+        assert is_similar_url("", "") is True
+
+    def test_url_with_fragments(self) -> None:
+        url1 = "https://example.com/article/123"
+        url2 = "https://example.com/article/123#section"
+        assert is_similar_url(url1, url2) is True
+
+
+class TestDetectDuplicateArticles:
+    """Tests for detect_duplicate_articles function."""
+
+    def test_identical_articles(self) -> None:
         assert (
-            detect_duplicate_products(
-                "Samsung Galaxy S24",
-                "https://coupang.com/vp/products/123",
-                "Samsung Galaxy S24",
-                "https://coupang.com/vp/products/123",
+            detect_duplicate_articles(
+                "Breaking News",
+                "https://example.com/article/123",
+                "Breaking News",
+                "https://example.com/article/123",
             )
             is True
         )
 
-    def test_same_title_same_url_with_query_params(self) -> None:
+    def test_same_title_same_url_with_params(self) -> None:
         assert (
-            detect_duplicate_products(
-                "Samsung Galaxy S24",
-                "https://coupang.com/vp/products/123",
-                "Samsung Galaxy S24",
-                "https://coupang.com/vp/products/123?ref=abc",
+            detect_duplicate_articles(
+                "Breaking News",
+                "https://example.com/article/123",
+                "Breaking News",
+                "https://example.com/article/123?ref=abc",
             )
             is True
         )
 
-    def test_different_titles_same_url(self) -> None:
+    def test_different_titles_different_urls(self) -> None:
         assert (
-            detect_duplicate_products(
-                "Samsung Galaxy S24",
-                "https://coupang.com/vp/products/123",
-                "Galaxy S24",
-                "https://coupang.com/vp/products/123",
+            detect_duplicate_articles(
+                "Breaking News",
+                "https://example.com/article/123",
+                "Other News",
+                "https://example.com/article/456",
             )
             is False
         )
 
-    def test_same_title_different_urls(self) -> None:
+    def test_similar_titles_different_domains(self) -> None:
         assert (
-            detect_duplicate_products(
-                "Samsung Galaxy S24",
-                "https://coupang.com/vp/products/123",
-                "Samsung Galaxy S24",
-                "https://naver.com/vp/products/456",
+            detect_duplicate_articles(
+                "Breaking News",
+                "https://example.com/article/123",
+                "Breaking News",
+                "https://other.com/article/456",
             )
             is False
         )
 
     def test_similar_titles_similar_urls(self) -> None:
         assert (
-            detect_duplicate_products(
-                "  Samsung Galaxy S24  ",
-                "https://coupang.com/vp/products/123",
-                "Samsung Galaxy S24",
-                "https://coupang.com/vp/products/123?ref=abc",
+            detect_duplicate_articles(
+                "  Breaking News  ",
+                "https://example.com/article/123",
+                "Breaking News",
+                "https://example.com/article/123?ref=abc",
             )
             is True
         )
 
     def test_titles_with_special_chars(self) -> None:
         assert (
-            detect_duplicate_products(
-                "iPhone 15 Pro (256GB)",
-                "https://coupang.com/vp/products/123",
-                "iPhone 15 Pro 256GB",
-                "https://coupang.com/vp/products/123",
+            detect_duplicate_articles(
+                "Title (Updated)",
+                "https://example.com/article/123",
+                "Title Updated",
+                "https://example.com/article/123",
             )
             is True
         )
 
     def test_custom_thresholds_strict(self) -> None:
         assert (
-            detect_duplicate_products(
-                "Samsung Galaxy S24",
-                "https://coupang.com/vp/products/123",
-                "Samsung Galaxy S24 Ultra",
-                "https://coupang.com/vp/products/123",
+            detect_duplicate_articles(
+                "Breaking News",
+                "https://example.com/article/123",
+                "Breaking News Update",
+                "https://example.com/article/123",
                 title_threshold=0.99,
             )
             is False
@@ -292,11 +233,11 @@ class TestDetectDuplicateProducts:
 
     def test_custom_thresholds_lenient(self) -> None:
         assert (
-            detect_duplicate_products(
-                "Samsung Galaxy S24",
-                "https://coupang.com/vp/products/123",
-                "Samsung Galaxy S24 Ultra",
-                "https://coupang.com/vp/products/123",
+            detect_duplicate_articles(
+                "Breaking News",
+                "https://example.com/article/123",
+                "Breaking News Update",
+                "https://example.com/article/123",
                 title_threshold=0.7,
             )
             is True
@@ -304,91 +245,170 @@ class TestDetectDuplicateProducts:
 
     def test_empty_titles(self) -> None:
         assert (
-            detect_duplicate_products(
-                "",
-                "https://coupang.com/vp/products/123",
-                "",
-                "https://coupang.com/vp/products/123",
-            )
-            is True
-        )
-
-
-class TestDetectDuplicateArticlesAlias:
-    def test_alias_matches_product_duplicate_logic(self) -> None:
-        assert (
             detect_duplicate_articles(
-                "Nintendo Switch OLED",
-                "https://shop.example.com/p/1",
-                "Nintendo Switch OLED",
-                "https://shop.example.com/p/1?utm=abc",
+                "",
+                "https://example.com/article/123",
+                "",
+                "https://example.com/article/123",
             )
             is True
         )
 
 
 class TestValidateArticle:
-    def test_validate_article_with_raw_item_dict(self) -> None:
-        article = {
-            "title": "닌텐도 스위치 OLED",
-            "url": "https://shop.example.com/p/1",
-            "category": "game",
-            "platform": "coupang",
-            "source": "fallcent",
-            "current_price": 390000,
-            "avg_price": 430000,
-            "list_price": 450000,
-            "discount_rate": 0.13,
-        }
+    """Tests for validate_article function."""
+
+    def test_valid_article(self) -> None:
+        article = Article(
+            title="Valid Article",
+            link="https://example.com/article",
+            summary="This is a summary",
+            published=datetime.now(UTC),
+            source="Example Source",
+            category="news",
+        )
         is_valid, errors = validate_article(article)
         assert is_valid is True
         assert errors == []
 
-    def test_validate_article_invalid_price(self) -> None:
-        article = {
-            "title": "닌텐도 스위치 OLED",
-            "url": "https://shop.example.com/p/1",
-            "category": "game",
-            "platform": "coupang",
-            "source": "fallcent",
-            "current_price": 50,
-            "discount_rate": 0.13,
-        }
+    def test_article_missing_title(self) -> None:
+        article = Article(
+            title="",
+            link="https://example.com/article",
+            summary="Summary",
+            published=datetime.now(UTC),
+            source="Source",
+            category="news",
+        )
         is_valid, errors = validate_article(article)
         assert is_valid is False
-        assert any("current_price out of range" in error for error in errors)
+        assert any("title" in error for error in errors)
+
+    def test_article_invalid_url(self) -> None:
+        article = Article(
+            title="Title",
+            link="not-a-url",
+            summary="Summary",
+            published=datetime.now(UTC),
+            source="Source",
+            category="news",
+        )
+        is_valid, errors = validate_article(article)
+        assert is_valid is False
+        assert any("link" in error for error in errors)
+
+    def test_article_missing_summary(self) -> None:
+        article = Article(
+            title="Title",
+            link="https://example.com/article",
+            summary="",
+            published=datetime.now(UTC),
+            source="Source",
+            category="news",
+        )
+        is_valid, errors = validate_article(article)
+        assert is_valid is False
+        assert any("summary" in error for error in errors)
+
+    def test_article_missing_source(self) -> None:
+        article = Article(
+            title="Title",
+            link="https://example.com/article",
+            summary="Summary",
+            published=datetime.now(UTC),
+            source="",
+            category="news",
+        )
+        is_valid, errors = validate_article(article)
+        assert is_valid is False
+        assert any("source" in error for error in errors)
+
+    def test_article_missing_category(self) -> None:
+        article = Article(
+            title="Title",
+            link="https://example.com/article",
+            summary="Summary",
+            published=datetime.now(UTC),
+            source="Source",
+            category="",
+        )
+        is_valid, errors = validate_article(article)
+        assert is_valid is False
+        assert any("category" in error for error in errors)
+
+    def test_article_multiple_errors(self) -> None:
+        article = Article(
+            title="",
+            link="invalid",
+            summary="",
+            published=datetime.now(UTC),
+            source="",
+            category="",
+        )
+        is_valid, errors = validate_article(article)
+        assert is_valid is False
+        assert len(errors) >= 4
+
+    def test_article_with_none_published(self) -> None:
+        article = Article(
+            title="Title",
+            link="https://example.com/article",
+            summary="Summary",
+            published=None,
+            source="Source",
+            category="news",
+        )
+        is_valid, errors = validate_article(article)
+        assert is_valid is True
+        assert errors == []
+
+    def test_article_with_matched_entities(self) -> None:
+        article = Article(
+            title="Title",
+            link="https://example.com/article",
+            summary="Summary",
+            published=datetime.now(UTC),
+            source="Source",
+            category="news",
+            matched_entities={"entity1": ["keyword1", "keyword2"]},
+        )
+        is_valid, errors = validate_article(article)
+        assert is_valid is True
+        assert errors == []
 
 
 @pytest.mark.unit
 class TestValidatorsIntegration:
     """Integration tests for validators."""
 
-    def test_full_product_validation_flow(self) -> None:
-        title1 = "  Apple iPhone 15 Pro Max  "
-        url1 = "https://coupang.com/vp/products/123"
-        price1 = 1_500_000
-        discount1 = 0.15
+    def test_full_article_validation_flow(self) -> None:
+        title1 = "  Breaking News  "
+        url1 = "https://example.com/article/123"
 
-        title2 = "Apple iPhone 15 Pro Max"
-        url2 = "https://coupang.com/vp/products/123?ref=abc"
-        price2 = 1_500_000
-        discount2 = 0.15
+        title2 = "Breaking News"
+        url2 = "https://example.com/article/123?ref=abc"
 
         assert normalize_title(title1) == normalize_title(title2)
         assert validate_url_format(url1) is True
         assert validate_url_format(url2) is True
-        assert validate_price_range(price1) is True
-        assert validate_price_range(price2) is True
-        assert validate_discount_rate(discount1) is True
-        assert validate_discount_rate(discount2) is True
-        assert detect_duplicate_products(title1, url1, title2, url2) is True
+        assert detect_duplicate_articles(title1, url1, title2, url2) is True
 
-    def test_invalid_product_validation_flow(self) -> None:
-        title = "Product"
+    def test_invalid_article_validation_flow(self) -> None:
+        title = "Article"
         url = "not-a-url"
-        price = 50
-        discount = 1.5
 
         assert validate_url_format(url) is False
-        assert validate_price_range(price) is False
-        assert validate_discount_rate(discount) is False
+        assert normalize_title(title) == "article"
+
+    def test_article_object_validation(self) -> None:
+        article = Article(
+            title="Valid Article Title",
+            link="https://example.com/news/article-123",
+            summary="This is a comprehensive summary of the article content.",
+            published=datetime.now(UTC),
+            source="News Source",
+            category="technology",
+        )
+        is_valid, errors = validate_article(article)
+        assert is_valid is True
+        assert len(errors) == 0

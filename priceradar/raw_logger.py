@@ -4,22 +4,61 @@ import json
 from collections.abc import Iterable
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Any
+
+from .models import Article
 
 
 class RawLogger:
-    def __init__(self, raw_dir: Path) -> None:
-        self.raw_dir = raw_dir
+    def __init__(self, raw_dir: Path):
+        self.raw_dir: Path = raw_dir
 
-    def log(self, records: Iterable[dict[str, Any]], *, source_name: str) -> Path:
-        """Log scraped product data to JSONL."""
-        date_dir = self.raw_dir / datetime.now(tz=UTC).strftime("%Y-%m-%d")
-        date_dir.mkdir(parents=True, exist_ok=True)
+    def log(
+        self,
+        articles: Iterable[Article],
+        *,
+        source_name: str,
+        run_id: str | None = None,
+    ) -> Path:
+        now = datetime.now(UTC)
+        date_dir = self.raw_dir / now.date().isoformat()
+        safe_source_name = source_name.replace("/", "_").replace("\\", "_")
 
-        file_path = date_dir / f"{source_name}.jsonl"
-        with file_path.open("a", encoding="utf-8") as file_obj:
-            for record in records:
-                file_obj.write(json.dumps(record, ensure_ascii=False, default=str))
-                file_obj.write("\n")
+        if run_id is not None:
+            output_path = date_dir / f"{safe_source_name}_{run_id}.jsonl"
+        else:
+            output_path = date_dir / f"{safe_source_name}.jsonl"
 
-        return file_path
+        output_path.parent.mkdir(parents=True, exist_ok=True)
+
+        existing_links: set[str] = set()
+        if run_id is not None and output_path.exists():
+            try:
+                with output_path.open("r", encoding="utf-8") as handle:
+                    for line in handle:
+                        if line.strip():
+                            record = json.loads(line)
+                            existing_links.add(record.get("link", ""))
+            except (OSError, json.JSONDecodeError):
+                pass
+
+        with output_path.open("a", encoding="utf-8") as handle:
+            for article in articles:
+                if run_id is not None and article.link in existing_links:
+                    continue
+
+                record = {
+                    "title": article.title,
+                    "link": article.link,
+                    "summary": article.summary,
+                    "published": article.published.isoformat() if article.published else None,
+                    "source": article.source,
+                    "category": article.category,
+                    "matched_entities": article.matched_entities,
+                    "logged_at": now.isoformat(),
+                }
+                _ = handle.write(json.dumps(record, ensure_ascii=False))
+                _ = handle.write("\n")
+                if run_id is not None:
+                    existing_links.add(article.link)
+
+        return output_path
