@@ -3,7 +3,7 @@ from __future__ import annotations
 import re
 import time
 from datetime import datetime
-from typing import Any, Optional
+from typing import Any
 from urllib.parse import parse_qs, urlencode, urljoin, urlparse, urlunparse
 
 import requests
@@ -149,7 +149,7 @@ class RuliwebCollector(BaseCollector):
 
         return False
 
-    def _parse_post(self, row: Tag) -> Optional[RawItem]:
+    def _parse_post(self, row: Tag) -> RawItem | None:
         raw_row_classes = row.get("class")
         if isinstance(raw_row_classes, list):
             row_classes = {str(value) for value in raw_row_classes}
@@ -202,7 +202,7 @@ class RuliwebCollector(BaseCollector):
             },
         )
 
-    def _extract_price_from_title(self, title: str) -> Optional[int]:
+    def _extract_price_from_title(self, title: str) -> int | None:
         normalized_title = title.replace("\xa0", " ").strip()
         candidates: list[tuple[int, int]] = []
 
@@ -230,13 +230,13 @@ class RuliwebCollector(BaseCollector):
         candidates.sort(key=lambda item: item[0])
         return candidates[0][1]
 
-    def _extract_post_id(self, url: str) -> Optional[str]:
+    def _extract_post_id(self, url: str) -> str | None:
         matched = self._POST_ID_PATTERN.search(url)
         if not matched:
             return None
         return matched.group(1)
 
-    def _extract_text(self, row: Tag, selector: str) -> Optional[str]:
+    def _extract_text(self, row: Tag, selector: str) -> str | None:
         target = row.select_one(selector)
         if not target:
             return None
@@ -251,7 +251,7 @@ class RuliwebCollector(BaseCollector):
         normalized = self._TRAILING_REPLY_PATTERN.sub("", normalized).strip()
         return normalized
 
-    def _to_price_value(self, raw_value: str) -> Optional[int]:
+    def _to_price_value(self, raw_value: str) -> int | None:
         number_text = raw_value.replace(",", "").strip()
         if not number_text:
             return None

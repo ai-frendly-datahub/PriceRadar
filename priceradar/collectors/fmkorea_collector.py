@@ -13,7 +13,7 @@ import hashlib
 import re
 import time
 from datetime import datetime
-from typing import Any, Optional
+from typing import Any
 from urllib.parse import urljoin
 
 import requests
@@ -103,7 +103,7 @@ class FmkoreaCollector(BaseCollector):
         stop=stop_after_attempt(3),
         wait=wait_exponential(multiplier=1, min=2, max=10),
     )
-    def _fetch_html(self, url: str) -> Optional[str]:
+    def _fetch_html(self, url: str) -> str | None:
         """HTTP 요청으로 HTML 가져오기"""
         try:
             response = self.session.get(url, timeout=self.timeout)
@@ -119,7 +119,7 @@ class FmkoreaCollector(BaseCollector):
             print(f"[{self.source_id}] HTML 가져오기 실패 ({url}): {e}")
             raise
 
-    def _parse_post(self, post_elem: Tag) -> Optional[RawItem]:
+    def _parse_post(self, post_elem: Tag) -> RawItem | None:
         """게시물 요소에서 상품 정보 추출"""
         title_elem = post_elem.select_one("a.post-title, a.subject")
         if not title_elem:
@@ -184,7 +184,7 @@ class FmkoreaCollector(BaseCollector):
             },
         )
 
-    def _extract_price_from_title(self, title: str) -> Optional[int]:
+    def _extract_price_from_title(self, title: str) -> int | None:
         """제목에서 가격 정보 추출"""
         price_patterns = [
             r"(\d+(?:,\d{3})*)\s*원",

@@ -8,7 +8,7 @@ import hashlib
 import json
 import re
 from datetime import datetime
-from typing import Any, Optional
+from typing import Any
 from urllib.parse import urljoin, urlparse
 
 import requests
@@ -230,7 +230,7 @@ class EnuriCollector(BaseCollector):
         stop=stop_after_attempt(3),
         wait=wait_exponential(multiplier=1, min=2, max=10),
     )
-    def _fetch_html(self, url: str) -> Optional[str]:
+    def _fetch_html(self, url: str) -> str | None:
         """
         URL에서 HTML 가져오기 (재시도 로직 포함).
 
@@ -284,7 +284,7 @@ class EnuriCollector(BaseCollector):
 
         return items
 
-    def _parse_product_from_best_goods(self, product_data: dict[str, Any]) -> Optional[RawItem]:
+    def _parse_product_from_best_goods(self, product_data: dict[str, Any]) -> RawItem | None:
         try:
             title = str(product_data.get("gd_nm", "")).strip()
             if not title:
@@ -346,7 +346,7 @@ class EnuriCollector(BaseCollector):
             print(f"[{self.source_id}] BestGoods 상품 파싱 실패: {e}")
             return None
 
-    def _extract_json_var(self, script_content: Optional[str], var_name: str) -> Any:
+    def _extract_json_var(self, script_content: str | None, var_name: str) -> Any:
         """JavaScript 변수에서 JSON 데이터 추출"""
         try:
             if not script_content:
@@ -381,7 +381,7 @@ class EnuriCollector(BaseCollector):
 
         return None
 
-    def _parse_price(self, value: Any) -> Optional[int]:
+    def _parse_price(self, value: Any) -> int | None:
         if value is None:
             return None
 
@@ -395,7 +395,7 @@ class EnuriCollector(BaseCollector):
 
         return int(matched.group(0))
 
-    def _parse_discount_rate(self, value: Any) -> Optional[float]:
+    def _parse_discount_rate(self, value: Any) -> float | None:
         if value is None:
             return None
 
@@ -416,7 +416,7 @@ class EnuriCollector(BaseCollector):
 
         return numeric_value
 
-    def _parse_product_from_json(self, product_data: Optional[dict[str, Any]]) -> Optional[RawItem]:
+    def _parse_product_from_json(self, product_data: dict[str, Any] | None) -> RawItem | None:
         """JSON 객체에서 RawItem 생성"""
         try:
             if not product_data:
@@ -489,7 +489,7 @@ class EnuriCollector(BaseCollector):
         hash_obj = hashlib.md5(url.encode())
         return f"{self.source_id}_{hash_obj.hexdigest()[:12]}"
 
-    def _infer_platform(self, shop_name: Optional[str], url: str) -> Optional[str]:
+    def _infer_platform(self, shop_name: str | None, url: str) -> str | None:
         """판매처명과 URL에서 플랫폼 추론"""
         if shop_name:
             shop_lower = shop_name.lower()

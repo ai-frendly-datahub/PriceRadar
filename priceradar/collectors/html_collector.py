@@ -4,9 +4,8 @@ HTML 수집기 - BeautifulSoup 기반 웹 페이지 크롤링
 
 import hashlib
 import re
-import time
 from datetime import datetime
-from typing import Any, Optional
+from typing import Any
 from urllib.parse import urljoin, urlparse
 
 import requests
@@ -22,9 +21,7 @@ class HtmlCollector(BaseCollector):
         super().__init__(source_id, config)
         self.url = config.get("url", "")
         self.selectors = config.get("selectors", {})
-        self.user_agent = config.get(
-            "user_agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"
-        )
+        self.user_agent = config.get("user_agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64)")
         self.timeout = config.get("timeout", 30)
 
     def collect(self) -> list[RawItem]:
@@ -41,7 +38,7 @@ class HtmlCollector(BaseCollector):
             print(f"[{self.source_id}] 수집 실패: {e}")
             return []
 
-    def _fetch_html(self, url: str) -> Optional[str]:
+    def _fetch_html(self, url: str) -> str | None:
         """URL에서 HTML 콘텐츠를 가져옴"""
         headers = {"User-Agent": self.user_agent}
 
@@ -89,7 +86,7 @@ class HtmlCollector(BaseCollector):
 
         return items
 
-    def _parse_single_item(self, elem: Tag, base_url: str) -> Optional[RawItem]:
+    def _parse_single_item(self, elem: Tag, base_url: str) -> RawItem | None:
         """단일 아이템 파싱"""
         # 제목
         title = self._extract_text(elem, self.selectors.get("title"))
@@ -139,7 +136,7 @@ class HtmlCollector(BaseCollector):
 
         return raw_item
 
-    def _extract_text(self, elem: Tag, selector: Optional[str]) -> Optional[str]:
+    def _extract_text(self, elem: Tag, selector: str | None) -> str | None:
         """텍스트 추출"""
         if not selector:
             return elem.get_text(strip=True)
@@ -149,7 +146,7 @@ class HtmlCollector(BaseCollector):
             return found.get_text(strip=True)
         return None
 
-    def _extract_link(self, elem: Tag, selector: str, base_url: str) -> Optional[str]:
+    def _extract_link(self, elem: Tag, selector: str, base_url: str) -> str | None:
         """링크 추출 및 절대 URL 변환"""
         found = elem.select_one(selector)
         if not found:
@@ -162,7 +159,7 @@ class HtmlCollector(BaseCollector):
         # 절대 URL로 변환
         return urljoin(base_url, href)
 
-    def _extract_price(self, elem: Tag, selector: Optional[str]) -> Optional[int]:
+    def _extract_price(self, elem: Tag, selector: str | None) -> int | None:
         """가격 추출 (숫자만)"""
         if not selector:
             return None
@@ -177,7 +174,7 @@ class HtmlCollector(BaseCollector):
             return int(numbers)
         return None
 
-    def _extract_discount_rate(self, elem: Tag, selector: Optional[str]) -> Optional[float]:
+    def _extract_discount_rate(self, elem: Tag, selector: str | None) -> float | None:
         """할인율 추출 (0.0 ~ 1.0)"""
         if not selector:
             return None
@@ -196,7 +193,7 @@ class HtmlCollector(BaseCollector):
             return rate
         return None
 
-    def _extract_image(self, elem: Tag, selector: Optional[str]) -> Optional[str]:
+    def _extract_image(self, elem: Tag, selector: str | None) -> str | None:
         """이미지 URL 추출"""
         if not selector:
             return None
@@ -217,7 +214,7 @@ class HtmlCollector(BaseCollector):
         hash_obj = hashlib.md5(url.encode())
         return f"{self.source_id}_{hash_obj.hexdigest()[:12]}"
 
-    def _infer_platform(self, url: str) -> Optional[str]:
+    def _infer_platform(self, url: str) -> str | None:
         """URL에서 쇼핑몰 플랫폼 추론"""
         parsed = urlparse(url)
         domain = parsed.netloc.lower()

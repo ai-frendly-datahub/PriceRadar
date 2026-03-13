@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from datetime import datetime
-from typing import Optional, Any, Dict, List, Tuple
+from typing import Any
 
 from dateutil import parser as date_parser
 
@@ -10,11 +10,13 @@ from .scoring import compute_radar_score
 from .storage import PriceStorage
 
 
-def run_pipeline(raw_snapshots: List[Dict[str, Any]], *, db_path, limit: Optional[int] = None) -> Tuple[int, int, int]:
+def run_pipeline(
+    raw_snapshots: list[dict[str, Any]], *, db_path, limit: int | None = None
+) -> tuple[int, int, int]:
     """스냅샷 JSON 배열 → 정규화 → 스코어링 → DuckDB 저장."""
-    normalized_products: Dict[str, Product] = {}
-    snapshots: List[PriceSnapshot] = []
-    events: List[PriceEvent] = []
+    normalized_products: dict[str, Product] = {}
+    snapshots: list[PriceSnapshot] = []
+    events: list[PriceEvent] = []
 
     for idx, item in enumerate(raw_snapshots):
         if limit is not None and idx >= limit:
@@ -43,7 +45,7 @@ def run_pipeline(raw_snapshots: List[Dict[str, Any]], *, db_path, limit: Optiona
     return len(normalized_products), n_snap, n_events
 
 
-def _normalize_snapshot(item: Dict[str, Any]) -> Tuple[PriceSnapshot, Product]:
+def _normalize_snapshot(item: dict[str, Any]) -> tuple[PriceSnapshot, Product]:
     """입력 JSON을 내부 스키마로 변환."""
     product_id = item.get("product_id") or "unknown"
     ts_raw = item.get("timestamp") or item.get("ts") or datetime.utcnow().isoformat()
@@ -83,7 +85,7 @@ def _normalize_snapshot(item: Dict[str, Any]) -> Tuple[PriceSnapshot, Product]:
     return snapshot, product
 
 
-def _safe_int(value: Any) -> Optional[int]:
+def _safe_int(value: Any) -> int | None:
     if value is None:
         return None
     try:

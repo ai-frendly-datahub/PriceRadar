@@ -4,7 +4,7 @@ import hashlib
 import re
 import time
 from datetime import datetime
-from typing import Any, Optional
+from typing import Any
 from urllib.parse import parse_qs, urlencode, urljoin, urlparse, urlunparse
 
 import requests
@@ -150,7 +150,7 @@ class QuasarzoneCollector(BaseCollector):
 
         return items
 
-    def _parse_post(self, post_elem: Tag) -> Optional[RawItem]:
+    def _parse_post(self, post_elem: Tag) -> RawItem | None:
         link_elem = post_elem.select_one("a.subject-link")
         if not link_elem:
             return None
@@ -227,7 +227,7 @@ class QuasarzoneCollector(BaseCollector):
             },
         )
 
-    def _extract_price(self, text: Optional[str]) -> Optional[int]:
+    def _extract_price(self, text: str | None) -> int | None:
         if not text:
             return None
 
@@ -237,7 +237,7 @@ class QuasarzoneCollector(BaseCollector):
 
         return int(matched.group(1).replace(",", ""))
 
-    def _extract_price_from_title(self, title: str) -> Optional[int]:
+    def _extract_price_from_title(self, title: str) -> int | None:
         if not title:
             return None
 
@@ -255,7 +255,7 @@ class QuasarzoneCollector(BaseCollector):
 
         return None
 
-    def _extract_discount_rate(self, text: str) -> Optional[float]:
+    def _extract_discount_rate(self, text: str) -> float | None:
         matched = re.search(r"(\d+(?:\.\d+)?)\s*%", text)
         if not matched:
             return None
@@ -269,13 +269,13 @@ class QuasarzoneCollector(BaseCollector):
 
         return rate
 
-    def _extract_post_id(self, url: str) -> Optional[str]:
+    def _extract_post_id(self, url: str) -> str | None:
         matched = re.search(r"/views/(\d+)", url)
         if not matched:
             return None
         return matched.group(1)
 
-    def _extract_platform_from_title(self, title: str) -> Optional[str]:
+    def _extract_platform_from_title(self, title: str) -> str | None:
         matched = re.match(r"\[([^\]]+)\]", title.strip())
         if not matched:
             return None
@@ -287,7 +287,7 @@ class QuasarzoneCollector(BaseCollector):
 
         return None
 
-    def _normalize_category(self, raw_category: Optional[str]) -> Optional[str]:
+    def _normalize_category(self, raw_category: str | None) -> str | None:
         if not raw_category:
             return None
 
@@ -297,7 +297,7 @@ class QuasarzoneCollector(BaseCollector):
 
         return raw_category
 
-    def _extract_shipping(self, post_elem: Tag) -> Optional[str]:
+    def _extract_shipping(self, post_elem: Tag) -> str | None:
         for span in post_elem.select("div.market-info-sub p span"):
             text = span.get_text(" ", strip=True)
             if text.startswith("배송비"):
@@ -306,7 +306,7 @@ class QuasarzoneCollector(BaseCollector):
 
         return None
 
-    def _parse_view_count(self, view_count_text: Optional[str]) -> Optional[int]:
+    def _parse_view_count(self, view_count_text: str | None) -> int | None:
         if not view_count_text:
             return None
 

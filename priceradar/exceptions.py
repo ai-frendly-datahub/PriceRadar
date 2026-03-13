@@ -1,5 +1,4 @@
 from __future__ import annotations
-from typing import Optional
 
 
 class RadarError(Exception):
@@ -17,7 +16,7 @@ class CollectionError(RadarError):
 class SourceError(CollectionError):
     """Error specific to a single source."""
 
-    def __init__(self, source_name: str, message: str, original_error: Optional[Exception] = None):
+    def __init__(self, source_name: str, message: str, original_error: Exception | None = None):
         self.source_name = source_name
         self.original_error = original_error
         super().__init__(f"[{source_name}] {message}")

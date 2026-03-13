@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from datetime import datetime
-from typing import Any, Dict, Optional
+from typing import Any
 
 
 @dataclass
@@ -10,11 +10,11 @@ class Product:
     id: str
     title: str
     category: str
-    brand: Optional[str]
+    brand: str | None
     source_platform: str
     product_url: str
-    image_url: Optional[str] = None
-    attributes: Dict[str, Any] = field(default_factory=dict)
+    image_url: str | None = None
+    attributes: dict[str, Any] = field(default_factory=dict)
 
 
 @dataclass
@@ -22,12 +22,12 @@ class PriceSnapshot:
     product_id: str
     ts: datetime
     price: int
-    avg_price_30d: Optional[int] = None
-    avg_price_90d: Optional[int] = None
-    discount_rate_vs_avg: Optional[float] = None
-    discount_rate_vs_list: Optional[float] = None
+    avg_price_30d: int | None = None
+    avg_price_90d: int | None = None
+    discount_rate_vs_avg: float | None = None
+    discount_rate_vs_list: float | None = None
     source: str = "fallcent"
-    meta: Dict[str, Any] = field(default_factory=dict)
+    meta: dict[str, Any] = field(default_factory=dict)
 
 
 @dataclass
@@ -35,8 +35,8 @@ class PriceEvent:
     product_id: str
     event_ts: datetime
     event_type: str  # NEW_LOW | BIG_DROP | POPULAR_SPIKE
-    drop_rate: Optional[float]
-    saving_vs_avg: Optional[int]
+    drop_rate: float | None
+    saving_vs_avg: int | None
     radar_score: float
     explanation: str
 

@@ -4,10 +4,9 @@ Fallcent Collector - 폴센트 가격 추적 서비스 크롤러
 폴센트(https://fallcent.com)에서 최저가 상품 정보를 수집합니다.
 """
 
-import hashlib
 import re
 from datetime import datetime
-from typing import Any, Optional
+from typing import Any
 from urllib.parse import parse_qs, urljoin, urlparse
 
 import requests
@@ -52,7 +51,7 @@ class FallcentCollector(BaseCollector):
         stop=stop_after_attempt(3),
         wait=wait_exponential(multiplier=1, min=2, max=10),
     )
-    def _fetch_html(self, url: str) -> Optional[str]:
+    def _fetch_html(self, url: str) -> str | None:
         """
         URL에서 HTML 가져오기 (재시도 로직 포함).
 
@@ -117,7 +116,7 @@ class FallcentCollector(BaseCollector):
 
         return items
 
-    def _parse_single_product(self, link_elem: Tag, category: str = "all") -> Optional[RawItem]:
+    def _parse_single_product(self, link_elem: Tag, category: str = "all") -> RawItem | None:
         """단일 상품 정보 파싱"""
         # URL 파싱
         href = link_elem.get("href")
@@ -223,7 +222,7 @@ class FallcentCategoryCollector(FallcentCollector):
         # 급락 상품이므로 is_hotdeal 플래그 추가
         self.is_category_drop = True
 
-    def _parse_single_product(self, link_elem: Tag, category: str = "all") -> Optional[RawItem]:
+    def _parse_single_product(self, link_elem: Tag, category: str = "all") -> RawItem | None:
         """카테고리별 급락 상품 파싱 (부모 메서드 확장)"""
         item = super()._parse_single_product(link_elem, category)
 

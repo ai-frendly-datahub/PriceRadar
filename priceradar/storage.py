@@ -1,19 +1,19 @@
 from __future__ import annotations
 
 import json
-from datetime import datetime, timezone
+from collections.abc import Iterable
+from datetime import UTC, datetime
 from pathlib import Path
-from typing import Optional, Iterable
 
 import duckdb
 
 from .models import PriceEvent, PriceSnapshot, Product
-from .validators import detect_duplicate_products, normalize_title
+from .validators import detect_duplicate_products
 
 
 def _utc_naive(dt: datetime) -> datetime:
     if dt.tzinfo:
-        return dt.astimezone(timezone.utc).replace(tzinfo=None)
+        return dt.astimezone(UTC).replace(tzinfo=None)
     return dt
 
 
@@ -103,7 +103,7 @@ class PriceStorage:
                 ],
             )
 
-    def _find_duplicate_product(self, product: Product) -> Optional[str]:
+    def _find_duplicate_product(self, product: Product) -> str | None:
         """
         Find existing product that is a duplicate of the given product.
 

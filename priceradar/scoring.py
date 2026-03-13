@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Optional
 
 from .models import PriceEvent, PriceSnapshot
 
@@ -19,8 +18,8 @@ def compute_radar_score(
     *,
     is_new_low: bool,
     popularity_hint: float = 0.0,
-    volatility_hint: Optional[float] = None,
-    config: Optional[ScoreConfig] = None,
+    volatility_hint: float | None = None,
+    config: ScoreConfig | None = None,
 ) -> PriceEvent:
     cfg = config or ScoreConfig()
 
@@ -37,8 +36,12 @@ def compute_radar_score(
         + cfg.w_stability * stability
     )
 
-    event_type = "NEW_LOW" if is_new_low else "BIG_DROP" if discount_strength >= 0.2 else "POPULAR_SPIKE"
-    explanation = _build_explanation(snapshot, discount_strength, timing_rarity, popularity, volatility)
+    event_type = (
+        "NEW_LOW" if is_new_low else "BIG_DROP" if discount_strength >= 0.2 else "POPULAR_SPIKE"
+    )
+    explanation = _build_explanation(
+        snapshot, discount_strength, timing_rarity, popularity, volatility
+    )
     saving_vs_avg = None
     if snapshot.avg_price_30d and snapshot.price:
         saving_vs_avg = max(snapshot.avg_price_30d - snapshot.price, 0)
@@ -58,7 +61,13 @@ def compute_radar_score(
     )
 
 
-def _build_explanation(snapshot: PriceSnapshot, discount_strength: float, timing: float, popularity: float, volatility: float) -> str:
+def _build_explanation(
+    snapshot: PriceSnapshot,
+    discount_strength: float,
+    timing: float,
+    popularity: float,
+    volatility: float,
+) -> str:
     parts = []
     if snapshot.avg_price_30d:
         diff = snapshot.avg_price_30d - snapshot.price

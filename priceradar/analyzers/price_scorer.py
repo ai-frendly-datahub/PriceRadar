@@ -3,8 +3,6 @@
 """
 
 from dataclasses import dataclass
-from datetime import datetime
-from typing import Optional
 
 
 @dataclass
@@ -22,8 +20,8 @@ class PriceScore:
 
     # 메타데이터
     current_price: int
-    avg_price: Optional[int]
-    saving_amount: Optional[int]  # 절약 금액
+    avg_price: int | None
+    saving_amount: int | None  # 절약 금액
     explanation: str  # 사용자 설명
 
 
@@ -48,13 +46,13 @@ class PriceScorer:
         self,
         product_id: str,
         current_price: int,
-        avg_price: Optional[int] = None,
-        list_price: Optional[int] = None,
-        discount_rate: Optional[float] = None,
+        avg_price: int | None = None,
+        list_price: int | None = None,
+        discount_rate: float | None = None,
         is_lowest_now: bool = False,
         is_popular: bool = False,
         is_hotdeal: bool = False,
-        price_history: Optional[list[int]] = None,
+        price_history: list[int] | None = None,
     ) -> PriceScore:
         """
         상품의 가격 정보를 기반으로 구매 타이밍 점수를 계산
@@ -79,9 +77,7 @@ class PriceScorer:
         )
 
         # 2. 타이밍 희소성 계산
-        timing_rarity = self._calculate_timing_rarity(
-            current_price, price_history, is_lowest_now
-        )
+        timing_rarity = self._calculate_timing_rarity(current_price, price_history, is_lowest_now)
 
         # 3. 인기도 계산
         popularity = self._calculate_popularity(is_popular, is_hotdeal)
@@ -128,9 +124,9 @@ class PriceScorer:
     def _calculate_discount_strength(
         self,
         current_price: int,
-        avg_price: Optional[int],
-        list_price: Optional[int],
-        discount_rate: Optional[float],
+        avg_price: int | None,
+        list_price: int | None,
+        discount_rate: float | None,
     ) -> float:
         """할인 강도 계산 (0.0 ~ 1.0)"""
         scores = []
@@ -154,7 +150,7 @@ class PriceScorer:
     def _calculate_timing_rarity(
         self,
         current_price: int,
-        price_history: Optional[list[int]],
+        price_history: list[int] | None,
         is_lowest_now: bool,
     ) -> float:
         """타이밍 희소성 계산 (0.0 ~ 1.0)"""
@@ -187,7 +183,7 @@ class PriceScorer:
 
         return min(1.0, score)
 
-    def _calculate_volatility(self, price_history: Optional[list[int]]) -> float:
+    def _calculate_volatility(self, price_history: list[int] | None) -> float:
         """가격 변동성 계산 (0.0 ~ 1.0, 높을수록 변동이 심함)"""
         if not price_history or len(price_history) < 2:
             return 0.0
@@ -207,9 +203,9 @@ class PriceScorer:
     def _generate_explanation(
         self,
         current_price: int,
-        avg_price: Optional[int],
-        saving_amount: Optional[int],
-        discount_rate: Optional[float],
+        avg_price: int | None,
+        saving_amount: int | None,
+        discount_rate: float | None,
         is_lowest_now: bool,
         is_popular: bool,
     ) -> str:

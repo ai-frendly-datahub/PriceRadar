@@ -6,6 +6,7 @@ from typing import Any
 from priceradar.collectors.base import BaseCollector, RawItem
 from priceradar.collectors.registry import CollectorRegistry
 
+
 _COLLECTOR_MODULES = {
     "HtmlCollector": "priceradar.collectors.html_collector",
     "AlgumonCollector": "priceradar.collectors.algumon_collector",
