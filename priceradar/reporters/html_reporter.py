@@ -89,9 +89,7 @@ class HtmlReporter:
 
         # 카테고리 및 플랫폼 목록 추출
         categories = sorted({deal.get("category", "기타") for deal in deals})
-        platforms = sorted(
-            {deal.get("platform", "기타") for deal in deals if deal.get("platform")}
-        )
+        platforms = sorted({deal.get("platform", "기타") for deal in deals if deal.get("platform")})
 
         html_parts = [
             "<!DOCTYPE html>",

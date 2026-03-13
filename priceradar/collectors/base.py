@@ -85,7 +85,9 @@ class BaseCollector(ABC):
         def _fetch_html_impl() -> str | None:
             response = requests.get(url, timeout=self._resolve_timeout())
             response.raise_for_status()
-            response.encoding = response.apparent_encoding or "utf-8"
+            # charset meta 태그를 우선으로 encoding 감지
+            if response.encoding is None or not response.encoding:
+                response.encoding = response.apparent_encoding or "utf-8"
             return response.text
 
         return breaker.call(
@@ -113,22 +115,26 @@ class BaseCollector(ABC):
         pass
 
     def validate_item(self, item: RawItem) -> bool:
+        # 필수 필드 검증
         if not item.product_id or not item.title or not item.url:
             return False
 
+        # URL 형식 검증
         if not validate_url_format(item.url):
             return False
 
-        if not validate_price_range(item.current_price):
+        # 가격 범위 검증 (None 허용 - 선택적 필드)
+        if item.current_price is not None and not validate_price_range(item.current_price):
             return False
 
-        if not validate_price_range(item.avg_price):
+        if item.avg_price is not None and not validate_price_range(item.avg_price):
             return False
 
-        if not validate_price_range(item.list_price):
+        if item.list_price is not None and not validate_price_range(item.list_price):
             return False
 
-        if not validate_discount_rate(item.discount_rate):
+        # 할인율 검증 (None 허용)
+        if item.discount_rate is not None and not validate_discount_rate(item.discount_rate):
             return False
 
         return True
