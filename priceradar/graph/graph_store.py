@@ -3,9 +3,7 @@ GraphStore - DuckDB 기반 데이터 저장 및 조회
 """
 
 import os
-from datetime import datetime
-from pathlib import Path
-from typing import Any, Optional
+from typing import Any
 
 import duckdb
 
@@ -178,9 +176,7 @@ class GraphStore:
             ],
         )
 
-    def get_top_deals(
-        self, limit: int = 20, category: Optional[str] = None
-    ) -> list[dict[str, Any]]:
+    def get_top_deals(self, limit: int = 20, category: str | None = None) -> list[dict[str, Any]]:
         """
         레이다 점수 기준 상위 딜 조회
 
@@ -264,7 +260,7 @@ class GraphStore:
 
         return [dict(zip(columns, row)) for row in result]
 
-    def get_product(self, product_id: str) -> Optional[dict[str, Any]]:
+    def get_product(self, product_id: str) -> dict[str, Any] | None:
         """특정 상품 정보 조회"""
         result = self.conn.execute(
             """

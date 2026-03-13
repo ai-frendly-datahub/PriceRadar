@@ -11,7 +11,7 @@ from __future__ import annotations
 
 import re
 from difflib import SequenceMatcher
-from typing import Any, Optional
+from typing import Any
 from urllib.parse import urlparse
 
 
@@ -90,7 +90,7 @@ def is_similar_url(url1: str, url2: str, threshold: float = 0.8) -> bool:
 
 
 def validate_price_range(
-    price: Optional[int],
+    price: int | None,
     min_price: int = 100,
     max_price: int = 1_000_000_000,
 ) -> bool:
@@ -119,7 +119,7 @@ def validate_price_range(
     return min_price <= price <= max_price
 
 
-def validate_discount_rate(discount_rate: Optional[float]) -> bool:
+def validate_discount_rate(discount_rate: float | None) -> bool:
     """
     Validate if discount rate is within acceptable range (0.0 - 1.0).
 
@@ -145,7 +145,7 @@ def validate_discount_rate(discount_rate: Optional[float]) -> bool:
     return 0.0 <= discount_rate <= 1.0
 
 
-def validate_url_format(url: Optional[str]) -> bool:
+def validate_url_format(url: str | None) -> bool:
     """
     Validate if URL has valid format.
 

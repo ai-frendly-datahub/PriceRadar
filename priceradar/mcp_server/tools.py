@@ -3,7 +3,6 @@ from __future__ import annotations
 import json
 from datetime import datetime, timedelta
 from pathlib import Path
-from typing import Any
 
 import duckdb
 
@@ -15,7 +14,9 @@ def handle_search(*, search_db_path: Path, db_path: Path, query: str, limit: int
     _ = db_path
     parsed = parse_query(query)
     index = SearchIndex(search_db_path)
-    results = index.search(parsed.search_text or query, limit=parsed.limit if limit == 20 else limit)
+    results = index.search(
+        parsed.search_text or query, limit=parsed.limit if limit == 20 else limit
+    )
 
     payload = {
         "ok": True,
@@ -23,8 +24,7 @@ def handle_search(*, search_db_path: Path, db_path: Path, query: str, limit: int
         "days": parsed.days,
         "limit": parsed.limit if limit == 20 else limit,
         "results": [
-            {"link": item.link, "title": item.title, "body": item.body}
-            for item in results
+            {"link": item.link, "title": item.title, "body": item.body} for item in results
         ],
     }
     return json.dumps(payload, ensure_ascii=False, default=str)
@@ -88,7 +88,9 @@ def handle_sql(*, db_path: Path, query: str) -> str:
     except Exception as exc:
         return json.dumps({"ok": False, "error": str(exc)}, ensure_ascii=False)
 
-    return json.dumps({"ok": True, "columns": columns, "rows": rows}, ensure_ascii=False, default=str)
+    return json.dumps(
+        {"ok": True, "columns": columns, "rows": rows}, ensure_ascii=False, default=str
+    )
 
 
 def handle_top_trends(*, db_path: Path, days: int = 7, limit: int = 20) -> str:
@@ -205,6 +207,8 @@ def _is_read_only_query(query: str) -> bool:
     if ";" in normalized.rstrip(";"):
         return False
 
-    return normalized.startswith("select") or normalized.startswith("with") or normalized.startswith(
-        "explain"
+    return (
+        normalized.startswith("select")
+        or normalized.startswith("with")
+        or normalized.startswith("explain")
     )

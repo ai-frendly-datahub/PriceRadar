@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 from datetime import datetime, timedelta
-from typing import Dict, List
 
 import pytest
 
@@ -10,9 +9,9 @@ from priceradar.forecasting.price_forecast import forecast_category_prices
 from priceradar.models import Deal
 
 
-def _build_deals(category: str, days: int, base_price: float) -> List[Deal]:
+def _build_deals(category: str, days: int, base_price: float) -> list[Deal]:
     start = datetime(2026, 1, 1)
-    deals: List[Deal] = []
+    deals: list[Deal] = []
     for day in range(days):
         deals.append(
             Deal(
@@ -24,7 +23,7 @@ def _build_deals(category: str, days: int, base_price: float) -> List[Deal]:
     return deals
 
 
-def _fake_forecast(value: float) -> Dict[str, List[float]]:
+def _fake_forecast(value: float) -> dict[str, list[float]]:
     return {
         "forecast": [value + float(idx) for idx in range(14)],
         "lower_80": [value - 1000.0 + float(idx) for idx in range(14)],
@@ -39,7 +38,7 @@ def test_forecast_category_prices_returns_14_day_output(monkeypatch: pytest.Monk
     deals = _build_deals("Laptop", 30, 100000.0)
     deals.extend(_build_deals("Tablet", 22, 70000.0))
 
-    def fake_arima(series: List[float]) -> Dict[str, List[float]]:
+    def fake_arima(series: list[float]) -> dict[str, list[float]]:
         return _fake_forecast(series[-1])
 
     monkeypatch.setattr(price_forecast, "_try_arima_forecast", fake_arima)
@@ -62,7 +61,7 @@ def test_forecast_category_prices_skips_categories_with_short_history(
     deals = _build_deals("Laptop", 30, 100000.0)
     deals.extend(_build_deals("Sparse", 20, 50000.0))
 
-    def fake_arima(series: List[float]) -> Dict[str, List[float]]:
+    def fake_arima(series: list[float]) -> dict[str, list[float]]:
         return _fake_forecast(series[-1])
 
     monkeypatch.setattr(price_forecast, "_try_arima_forecast", fake_arima)
@@ -80,12 +79,12 @@ def test_forecast_category_prices_uses_prophet_when_arima_fails(
     deals = _build_deals("Laptop", 30, 100000.0)
     call_flags = {"arima": False, "prophet": False}
 
-    def fake_arima(series: List[float]) -> None:
+    def fake_arima(series: list[float]) -> None:
         _ = series
         call_flags["arima"] = True
         return None
 
-    def fake_prophet(series: List[float]) -> Dict[str, List[float]]:
+    def fake_prophet(series: list[float]) -> dict[str, list[float]]:
         call_flags["prophet"] = True
         return _fake_forecast(series[-1])
 

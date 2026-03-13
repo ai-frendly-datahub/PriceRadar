@@ -5,9 +5,9 @@ HTML Reporter - Jinja2 기반 가격 레이다 리포트 생성
 import json
 import os
 from collections import defaultdict
-from datetime import date, datetime
+from datetime import UTC, date, datetime
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Set
+from typing import Any
 
 from jinja2 import Environment, FileSystemLoader, select_autoescape
 
@@ -37,7 +37,7 @@ class HtmlReporter:
 
     def generate_report(
         self,
-        deals: List[dict[str, Any]],
+        deals: list[dict[str, Any]],
         output_path: str,
         title: str = "PriceRadar 일일 리포트",
     ) -> str:
@@ -78,9 +78,9 @@ class HtmlReporter:
 
     def _generate_basic_html(
         self,
-        deals: List[dict[str, Any]],
+        deals: list[dict[str, Any]],
         title: str,
-        forecast_data: Optional[Dict[str, Dict[str, List[Any]]]] = None,
+        forecast_data: dict[str, dict[str, list[Any]]] | None = None,
     ) -> str:
         """기본 HTML 템플릿 (Jinja2 없이)"""
         now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
@@ -292,11 +292,13 @@ class HtmlReporter:
         )
 
         # Serialize deals to JSON
-        deals_json = json.dumps(deals, default=lambda o: o.isoformat() if isinstance(o, (datetime, date)) else str(o))
+        deals_json = json.dumps(
+            deals, default=lambda o: o.isoformat() if isinstance(o, (datetime, date)) else str(o)
+        )
         html_parts.append(deals_json)
         html_parts.append("        </script>")
 
-        forecast_payload: Dict[str, Dict[str, List[Any]]] = {}
+        forecast_payload: dict[str, dict[str, list[Any]]] = {}
         for category, payload in normalized_forecast_data.items():
             category_history = history_data.get(
                 category,
@@ -662,8 +664,8 @@ class HtmlReporter:
 
         return "\n".join(html_parts)
 
-    def _build_forecast_data(self, deals: List[dict[str, Any]]) -> Dict[str, Dict[str, List[Any]]]:
-        parsed_deals: List[Deal] = []
+    def _build_forecast_data(self, deals: list[dict[str, Any]]) -> dict[str, dict[str, list[Any]]]:
+        parsed_deals: list[Deal] = []
         for raw_deal in deals:
             parsed = self._to_deal(raw_deal)
             if parsed is not None:
@@ -679,24 +681,24 @@ class HtmlReporter:
 
     def _build_forecast_history(
         self,
-        deals: List[dict[str, Any]],
-        categories: Set[str],
-    ) -> Dict[str, Dict[str, List[Any]]]:
+        deals: list[dict[str, Any]],
+        categories: set[str],
+    ) -> dict[str, dict[str, list[Any]]]:
         if not categories:
             return {}
 
-        grouped: Dict[str, Dict[date, List[float]]] = defaultdict(lambda: defaultdict(list))
+        grouped: dict[str, dict[date, list[float]]] = defaultdict(lambda: defaultdict(list))
         for raw_deal in deals:
             parsed = self._to_deal(raw_deal)
             if parsed is None or parsed.category not in categories:
                 continue
             grouped[parsed.category][parsed.collected_at.date()].append(parsed.price)
 
-        history: Dict[str, Dict[str, List[Any]]] = {}
+        history: dict[str, dict[str, list[Any]]] = {}
         for category in sorted(grouped):
             day_map = grouped[category]
             sorted_days = sorted(day_map)
-            averages: List[float] = []
+            averages: list[float] = []
             for day in sorted_days:
                 day_values = day_map[day]
                 averages.append(sum(day_values) / len(day_values))
@@ -707,7 +709,7 @@ class HtmlReporter:
 
         return history
 
-    def _to_deal(self, raw_deal: dict[str, Any]) -> Optional[Deal]:
+    def _to_deal(self, raw_deal: dict[str, Any]) -> Deal | None:
         category_value = raw_deal.get("category")
         if not isinstance(category_value, str):
             return None
@@ -733,7 +735,7 @@ class HtmlReporter:
 
         return Deal(price=price, category=category, collected_at=collected_at)
 
-    def _parse_datetime(self, value: Any) -> Optional[datetime]:
+    def _parse_datetime(self, value: Any) -> datetime | None:
         if isinstance(value, datetime):
             return value
         if isinstance(value, str):
@@ -751,7 +753,7 @@ class HtmlReporter:
 
 def generate_index_html(report_dir: Path) -> Path:
     """Generate an index.html that lists all available report files."""
-    from datetime import datetime, timezone
+    from datetime import datetime
 
     report_dir.mkdir(parents=True, exist_ok=True)
 
@@ -766,7 +768,7 @@ def generate_index_html(report_dir: Path) -> Path:
         display_name = name.replace("_report", "").replace("_", " ").title()
         reports.append({"filename": html_file.name, "display_name": display_name})
 
-    generated_at = datetime.now(timezone.utc).isoformat()
+    generated_at = datetime.now(UTC).isoformat()
 
     if reports:
         cards_html = "\n    ".join(

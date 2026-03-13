@@ -1,5 +1,4 @@
 from __future__ import annotations
-from typing import Optional
 
 import re
 from dataclasses import dataclass
@@ -9,7 +8,7 @@ from dataclasses import dataclass
 class ParsedQuery:
     raw_query: str
     search_text: str
-    days: Optional[int]
+    days: int | None
     limit: int
 
 
@@ -29,7 +28,7 @@ def parse_query(query: str) -> ParsedQuery:
     return ParsedQuery(raw_query=query, search_text=search_text, days=days, limit=limit)
 
 
-def _extract_days(text: str) -> Optional[int]:
+def _extract_days(text: str) -> int | None:
     korean_match = _KOREAN_DAYS.search(text)
     if korean_match:
         return int(korean_match.group(1))

@@ -15,13 +15,13 @@ import time
 from dataclasses import asdict
 from datetime import datetime
 from pathlib import Path
-from typing import Optional, Any
+from typing import Any
 
 import yaml
 
 from priceradar.analyzers.price_scorer import PriceScorer
-from priceradar.collectors.registry import CollectorRegistry
 from priceradar.collectors.base import RawItem
+from priceradar.collectors.registry import CollectorRegistry
 from priceradar.config import load_notification_config
 from priceradar.graph.graph_store import GraphStore
 from priceradar.notifier import Notifier, PipelineNotifier, detect_price_notifications
@@ -33,20 +33,20 @@ from priceradar.validators import validate_article
 
 def load_config(config_path: str = "config/config.yaml") -> dict[str, Any]:
     """설정 파일 로드"""
-    with open(config_path, "r", encoding="utf-8") as f:
+    with open(config_path, encoding="utf-8") as f:
         return yaml.safe_load(f)
 
 
 def load_sources(sources_path: str = "config/sources.yaml") -> dict[str, Any]:
     """소스 설정 파일 로드"""
-    with open(sources_path, "r", encoding="utf-8") as f:
+    with open(sources_path, encoding="utf-8") as f:
         return yaml.safe_load(f)
 
 
 def run_collection(
     config: dict[str, Any],
     sources_config: dict[str, Any],
-    notifier: Optional[Notifier] = None,
+    notifier: Notifier | None = None,
 ) -> None:
     """데이터 수집 실행"""
     print("\n=== 데이터 수집 시작 ===")
@@ -149,7 +149,7 @@ def _raw_item_to_record(item: RawItem) -> dict[str, Any]:
     return record
 
 
-def _build_search_body(platform: Optional[str], category: Optional[str], brand: Optional[str]) -> str:
+def _build_search_body(platform: str | None, category: str | None, brand: str | None) -> str:
     return " ".join(part for part in [platform, category, brand] if part)
 
 
@@ -261,7 +261,7 @@ def run_scoring(config: dict[str, Any]) -> None:
     print(f"스코어링 완료: 총 {total_scored}개 상품 ({elapsed:.2f}초)")
 
 
-def generate_report(config: dict[str, Any], output_dir: Optional[str] = None) -> None:
+def generate_report(config: dict[str, Any], output_dir: str | None = None) -> None:
     """HTML 리포트 생성"""
     print("\n=== 리포트 생성 시작 ===")
 
@@ -300,7 +300,7 @@ def run_once(
     config: dict[str, Any],
     sources_config: dict[str, Any],
     generate_report_flag: bool = False,
-    notifier: Optional[Notifier] = None,
+    notifier: Notifier | None = None,
 ) -> None:
     """1회 실행"""
     print("\n" + "=" * 60)
@@ -327,7 +327,7 @@ def run_once(
     print(f"총 상품 수: {stats['total_products']}")
     print(f"총 스냅샷 수: {stats['total_snapshots']}")
     print(f"총 스코어 수: {stats['total_scores']}")
-    print(f"카테고리별 상품 수:")
+    print("카테고리별 상품 수:")
     for category, count in stats["categories"].items():
         print(f"  - {category}: {count}")
 
@@ -340,7 +340,7 @@ def run_scheduler(
     config: dict[str, Any],
     sources_config: dict[str, Any],
     interval_hours: int = 24,
-    notifier: Optional[Notifier] = None,
+    notifier: Notifier | None = None,
 ) -> None:
     """주기적 실행"""
     print(f"스케줄러 시작 ({interval_hours}시간 간격)")

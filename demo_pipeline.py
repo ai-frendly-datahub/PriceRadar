@@ -130,9 +130,7 @@ def main() -> None:
             is_hotdeal=item.is_hotdeal,
         )
         store.save_price_score(score)
-        print(
-            f"   → {item.title[:30]}... 점수: {score.radar_score:.2f}"
-        )
+        print(f"   → {item.title[:30]}... 점수: {score.radar_score:.2f}")
 
     print()
 
@@ -150,7 +148,7 @@ def main() -> None:
     print("5. HTML 리포트 생성 중...")
     reporter = HtmlReporter()
     today = datetime.now().strftime("%Y-%m-%d")
-    report_path = f"docs/reports/demo/index.html"
+    report_path = "docs/reports/demo/index.html"
 
     reporter.generate_report(
         deals=deals,
@@ -166,7 +164,7 @@ def main() -> None:
     print(f"   → 총 상품 수: {stats['total_products']}")
     print(f"   → 총 스냅샷 수: {stats['total_snapshots']}")
     print(f"   → 총 스코어 수: {stats['total_scores']}")
-    print(f"   → 카테고리별 상품 수:")
+    print("   → 카테고리별 상품 수:")
     for category, count in stats["categories"].items():
         print(f"      - {category}: {count}")
 

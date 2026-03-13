@@ -5,7 +5,7 @@ Base collector 모듈 - 모든 수집기의 기본 인터페이스
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from datetime import datetime
-from typing import Any, Optional, Union
+from typing import Any
 
 import requests
 
@@ -27,15 +27,15 @@ class RawItem:
     source: str
     collected_at: datetime = field(default_factory=datetime.now)
 
-    current_price: Optional[int] = None
-    avg_price: Optional[int] = None
-    list_price: Optional[int] = None
-    discount_rate: Optional[float] = None
+    current_price: int | None = None
+    avg_price: int | None = None
+    list_price: int | None = None
+    discount_rate: float | None = None
 
-    category: Optional[str] = None
-    platform: Optional[str] = None
-    image_url: Optional[str] = None
-    brand: Optional[str] = None
+    category: str | None = None
+    platform: str | None = None
+    image_url: str | None = None
+    brand: str | None = None
 
     is_hotdeal: bool = False
     is_popular: bool = False
@@ -78,11 +78,11 @@ class BaseCollector(ABC):
             source=source_name,
         )
 
-    def _fetch_html(self, url: str) -> Optional[str]:
+    def _fetch_html(self, url: str) -> str | None:
         source_name = self._resolve_source_name()
         breaker = self.breaker_manager.get_breaker(source_name)
 
-        def _fetch_html_impl() -> Optional[str]:
+        def _fetch_html_impl() -> str | None:
             response = requests.get(url, timeout=self._resolve_timeout())
             response.raise_for_status()
             response.encoding = response.apparent_encoding or "utf-8"
@@ -93,11 +93,11 @@ class BaseCollector(ABC):
             source=source_name,
         )
 
-    def _fetch_json(self, url: str) -> Union[dict[str, Any], list[Any]]:
+    def _fetch_json(self, url: str) -> dict[str, Any] | list[Any]:
         source_name = self._resolve_source_name()
         breaker = self.breaker_manager.get_breaker(source_name)
 
-        def _fetch_json_impl() -> Union[dict[str, Any], list[Any]]:
+        def _fetch_json_impl() -> dict[str, Any] | list[Any]:
             response = requests.get(url, timeout=self._resolve_timeout())
             response.raise_for_status()
             return response.json()

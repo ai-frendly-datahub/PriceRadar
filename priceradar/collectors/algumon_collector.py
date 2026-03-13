@@ -2,7 +2,7 @@ import hashlib
 import re
 import time
 from datetime import datetime
-from typing import Any, Optional
+from typing import Any
 from urllib.parse import urljoin, urlparse
 
 import requests
@@ -78,7 +78,7 @@ class AlgumonCollector(BaseCollector):
         stop=stop_after_attempt(3),
         wait=wait_exponential(multiplier=1, min=2, max=10),
     )
-    def _fetch_html(self, url: str) -> Optional[str]:
+    def _fetch_html(self, url: str) -> str | None:
         headers = {
             "User-Agent": self.user_agent,
             "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
@@ -94,7 +94,7 @@ class AlgumonCollector(BaseCollector):
             print(f"[{self.source_id}] HTML 가져오기 실패 ({url}): {e}")
             raise
 
-    def _parse_product(self, product_elem: Tag, list_type: str = "latest") -> Optional[RawItem]:
+    def _parse_product(self, product_elem: Tag, list_type: str = "latest") -> RawItem | None:
         detail_link_elem = product_elem.select_one("a.deal-detail-icon[href]")
         detail_href = str(detail_link_elem.get("href", "")).strip() if detail_link_elem else ""
         detail_url = urljoin(self.base_url, detail_href) if detail_href else None
@@ -205,7 +205,7 @@ class AlgumonCollector(BaseCollector):
         normalized_path = path.rstrip("/")
         return f"{self.base_url}{normalized_path}/{page}"
 
-    def _extract_deal_id(self, url: str) -> Optional[str]:
+    def _extract_deal_id(self, url: str) -> str | None:
         patterns = [r"/m/deal/(\d+)", r"/l/d/(\d+)"]
         for pattern in patterns:
             matched = re.search(pattern, url)
@@ -217,7 +217,7 @@ class AlgumonCollector(BaseCollector):
         hash_obj = hashlib.md5(url.encode())
         return f"{self.source_id}_{hash_obj.hexdigest()[:12]}"
 
-    def _parse_price(self, price_text: Optional[str]) -> Optional[int]:
+    def _parse_price(self, price_text: str | None) -> int | None:
         if not price_text:
             return None
 
@@ -227,7 +227,7 @@ class AlgumonCollector(BaseCollector):
 
         return int(matched.group(0).replace(",", ""))
 
-    def _parse_discount_rate(self, *texts: Optional[str]) -> Optional[float]:
+    def _parse_discount_rate(self, *texts: str | None) -> float | None:
         discount_keywords = ["할인", "off", "세일", "쿠폰", "최대", "인하"]
 
         for text in texts:
@@ -251,7 +251,7 @@ class AlgumonCollector(BaseCollector):
 
         return None
 
-    def _infer_platform(self, shop_name: Optional[str], product_url: str) -> Optional[str]:
+    def _infer_platform(self, shop_name: str | None, product_url: str) -> str | None:
         if shop_name:
             shop_lower = shop_name.lower().replace(" ", "")
             if "쿠팡" in shop_name or "coupang" in shop_lower:
@@ -282,7 +282,7 @@ class AlgumonCollector(BaseCollector):
 
         return None
 
-    def _extract_text(self, elem: Optional[Tag]) -> Optional[str]:
+    def _extract_text(self, elem: Tag | None) -> str | None:
         if not elem:
             return None
 

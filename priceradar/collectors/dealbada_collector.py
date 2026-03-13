@@ -13,7 +13,7 @@ import hashlib
 import re
 import time
 from datetime import datetime
-from typing import Any, Optional
+from typing import Any
 from urllib.parse import urljoin
 
 import requests
@@ -90,7 +90,7 @@ class DealbadaCollector(BaseCollector):
         stop=stop_after_attempt(3),
         wait=wait_exponential(multiplier=1, min=2, max=10),
     )
-    def _fetch_html(self, url: str) -> Optional[str]:
+    def _fetch_html(self, url: str) -> str | None:
         """HTTP 요청으로 HTML 가져오기"""
         headers = {
             "User-Agent": self.user_agent,
@@ -108,7 +108,7 @@ class DealbadaCollector(BaseCollector):
             print(f"[{self.source_id}] HTML 가져오기 실패 ({url}): {e}")
             raise
 
-    def _parse_deal(self, deal_elem: Tag) -> Optional[RawItem]:
+    def _parse_deal(self, deal_elem: Tag) -> RawItem | None:
         """딜 요소에서 상품 정보 추출"""
         title_elem = deal_elem.select_one("a.deal-title, a.product-name")
         if not title_elem:
@@ -133,7 +133,9 @@ class DealbadaCollector(BaseCollector):
         product_id = f"dealbada_{deal_id}"
 
         current_price = self._extract_price(deal_elem.select_one("span.current-price, span.price"))
-        list_price = self._extract_price(deal_elem.select_one("span.list-price, span.original-price"))
+        list_price = self._extract_price(
+            deal_elem.select_one("span.list-price, span.original-price")
+        )
 
         discount_rate = None
         if current_price and list_price and list_price > 0:
@@ -171,7 +173,7 @@ class DealbadaCollector(BaseCollector):
             },
         )
 
-    def _extract_price(self, price_elem: Optional[Tag]) -> Optional[int]:
+    def _extract_price(self, price_elem: Tag | None) -> int | None:
         """가격 요소에서 숫자 추출"""
         if not price_elem:
             return None
