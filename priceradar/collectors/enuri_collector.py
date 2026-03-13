@@ -278,7 +278,7 @@ class EnuriCollector(BaseCollector):
                 if pick_data and isinstance(pick_data, dict):
                     # pick_banner 배열 처리
                     banners = pick_data.get("pick_banner", [])
-                    for banner in banners:
+                    for _banner in banners:
                         # 기획전 정보는 별도 처리 (필요 시)
                         pass
 

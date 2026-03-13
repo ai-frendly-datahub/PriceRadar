@@ -88,9 +88,9 @@ class HtmlReporter:
         history_data = self._build_forecast_history(deals, set(normalized_forecast_data.keys()))
 
         # 카테고리 및 플랫폼 목록 추출
-        categories = sorted(set(deal.get("category", "기타") for deal in deals))
+        categories = sorted({deal.get("category", "기타") for deal in deals})
         platforms = sorted(
-            set(deal.get("platform", "기타") for deal in deals if deal.get("platform"))
+            {deal.get("platform", "기타") for deal in deals if deal.get("platform")}
         )
 
         html_parts = [

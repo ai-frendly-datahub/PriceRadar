@@ -258,7 +258,7 @@ class GraphStore:
             "collected_at",
         ]
 
-        return [dict(zip(columns, row)) for row in result]
+        return [dict(zip(columns, row, strict=False)) for row in result]
 
     def get_product(self, product_id: str) -> dict[str, Any] | None:
         """특정 상품 정보 조회"""
@@ -356,7 +356,7 @@ class GraphStore:
             "total_products": total_products,
             "total_snapshots": total_snapshots,
             "total_scores": total_scores,
-            "categories": {cat: count for cat, count in categories},
+            "categories": dict(categories),
         }
 
     def close(self) -> None:
