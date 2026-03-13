@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import importlib
 from collections import defaultdict
-from datetime import date, datetime, timedelta
+from datetime import UTC, date, datetime, timedelta
 from typing import Any
 
 from priceradar.models import Deal
@@ -147,7 +147,7 @@ def _try_prophet_forecast(series: list[float]) -> dict[str, list[float]] | None:
         return None
 
     try:
-        start = datetime(2000, 1, 1)
+        start = datetime(2000, 1, 1, tzinfo=UTC)
         history_dates = [start + timedelta(days=offset) for offset in range(len(series))]
         history_df = dataframe_class({"ds": history_dates, "y": series})
 

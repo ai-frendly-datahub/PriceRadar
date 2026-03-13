@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import UTC, datetime
 from typing import Any
 
 from dateutil import parser as date_parser
@@ -48,7 +48,7 @@ def run_pipeline(
 def _normalize_snapshot(item: dict[str, Any]) -> tuple[PriceSnapshot, Product]:
     """입력 JSON을 내부 스키마로 변환."""
     product_id = item.get("product_id") or "unknown"
-    ts_raw = item.get("timestamp") or item.get("ts") or datetime.utcnow().isoformat()
+    ts_raw = item.get("timestamp") or item.get("ts") or datetime.now(tz=UTC).isoformat()
     ts = date_parser.parse(ts_raw)
 
     product = Product(

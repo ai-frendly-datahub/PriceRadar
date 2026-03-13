@@ -4,7 +4,7 @@ PriceRadar 데모 파이프라인
 간단한 데이터 흐름을 보여주는 데모 스크립트
 """
 
-from datetime import datetime
+from datetime import UTC, datetime
 
 from priceradar.analyzers.price_scorer import PriceScorer
 from priceradar.collectors.base import RawItem
@@ -147,7 +147,7 @@ def main() -> None:
     # 5. HTML 리포트 생성
     print("5. HTML 리포트 생성 중...")
     reporter = HtmlReporter()
-    today = datetime.now().strftime("%Y-%m-%d")
+    today = datetime.now(tz=UTC).strftime("%Y-%m-%d")
     report_path = "docs/reports/demo/index.html"
 
     reporter.generate_report(

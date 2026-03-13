@@ -12,7 +12,7 @@ from __future__ import annotations
 import hashlib
 import re
 import time
-from datetime import datetime
+from datetime import UTC, datetime
 from typing import Any
 from urllib.parse import urljoin
 
@@ -159,7 +159,7 @@ class DealbadaCollector(BaseCollector):
             title=title,
             url=deal_url,
             source=self.source_id,
-            collected_at=datetime.now(),
+            collected_at=datetime.now(tz=UTC),
             current_price=current_price,
             list_price=list_price,
             discount_rate=discount_rate,

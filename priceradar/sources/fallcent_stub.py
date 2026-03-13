@@ -10,10 +10,10 @@ Fallcent 페이지를 실제로 크롤링하기 전, 파싱 로직의 틀을 제
   - 결과를 pipeline.run_pipeline에 넘길 JSON 구조로 맞추면 됩니다.
 """
 
-from typing import Any
+from typing import Any  # noqa: E402
 
-import requests
-from bs4 import BeautifulSoup  # type: ignore
+import requests  # noqa: E402
+from bs4 import BeautifulSoup  # type: ignore  # noqa: E402
 
 
 def fetch_fallcent_list(url: str) -> list[dict[str, Any]]:

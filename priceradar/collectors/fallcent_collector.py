@@ -5,7 +5,7 @@ Fallcent Collector - 폴센트 가격 추적 서비스 크롤러
 """
 
 import re
-from datetime import datetime
+from datetime import UTC, datetime
 from typing import Any
 from urllib.parse import parse_qs, urljoin, urlparse
 
@@ -188,7 +188,7 @@ class FallcentCollector(BaseCollector):
             title=title,
             url=product_url,
             source=self.source_id,
-            collected_at=datetime.now(),
+            collected_at=datetime.now(tz=UTC),
             current_price=current_price,
             discount_rate=discount_rate,
             category=category,  # Use the detected category instead of self.category

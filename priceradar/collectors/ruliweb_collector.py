@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import re
 import time
-from datetime import datetime
+from datetime import UTC, datetime
 from typing import Any
 from urllib.parse import parse_qs, urlencode, urljoin, urlparse, urlunparse
 
@@ -191,7 +191,7 @@ class RuliwebCollector(BaseCollector):
             title=title,
             url=post_url,
             source=self.source_id,
-            collected_at=datetime.now(),
+            collected_at=datetime.now(tz=UTC),
             current_price=current_price,
             category=self.category,
             platform="ruliweb",

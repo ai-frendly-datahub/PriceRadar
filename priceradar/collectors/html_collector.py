@@ -4,7 +4,7 @@ HTML 수집기 - BeautifulSoup 기반 웹 페이지 크롤링
 
 import hashlib
 import re
-from datetime import datetime
+from datetime import UTC, datetime
 from typing import Any
 from urllib.parse import urljoin, urlparse
 
@@ -123,7 +123,7 @@ class HtmlCollector(BaseCollector):
             title=title,
             url=link,
             source=self.source_id,
-            collected_at=datetime.now(),
+            collected_at=datetime.now(tz=UTC),
             current_price=current_price,
             avg_price=avg_price,
             list_price=list_price,

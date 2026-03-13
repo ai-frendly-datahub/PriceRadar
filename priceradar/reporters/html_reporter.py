@@ -64,7 +64,7 @@ class HtmlReporter:
             template = self.env.get_template("report.html")
             html_content = template.render(
                 title=title,
-                generated_at=datetime.now(),
+                generated_at=datetime.now(tz=UTC),
                 deals=deals,
                 total_deals=len(deals),
                 forecast_data=forecast_data,
@@ -83,7 +83,7 @@ class HtmlReporter:
         forecast_data: dict[str, dict[str, list[Any]]] | None = None,
     ) -> str:
         """기본 HTML 템플릿 (Jinja2 없이)"""
-        now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        now = datetime.now(tz=UTC).strftime("%Y-%m-%d %H:%M:%S")
         normalized_forecast_data = forecast_data or {}
         history_data = self._build_forecast_history(deals, set(normalized_forecast_data.keys()))
 
@@ -200,7 +200,7 @@ class HtmlReporter:
 
         # 딜 카드 생성
         for idx, deal in enumerate(deals):
-            product_id = deal.get("product_id", "")
+            _ = deal.get("product_id", "")
             title_text = deal.get("title", "제목 없음")
             url = deal.get("url", "#")
             category = deal.get("category", "기타")

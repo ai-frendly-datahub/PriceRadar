@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import datetime, timedelta
+from datetime import UTC, datetime, timedelta
 
 import pytest
 
@@ -10,7 +10,7 @@ from priceradar.models import Deal
 
 
 def _build_deals(category: str, days: int, base_price: float) -> list[Deal]:
-    start = datetime(2026, 1, 1)
+    start = datetime(2026, 1, 1, tzinfo=UTC)
     deals: list[Deal] = []
     for day in range(days):
         deals.append(

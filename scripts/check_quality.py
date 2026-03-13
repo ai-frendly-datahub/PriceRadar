@@ -12,7 +12,11 @@ import duckdb
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(PROJECT_ROOT))
 
-from priceradar.common.quality_checks import check_dates, check_missing_fields, run_all_checks
+from priceradar.common.quality_checks import (  # noqa: E402
+    check_dates,
+    check_missing_fields,
+    run_all_checks,
+)
 
 
 def main() -> None:

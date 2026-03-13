@@ -13,7 +13,7 @@ import argparse
 import os
 import time
 from dataclasses import asdict
-from datetime import datetime
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
@@ -278,7 +278,7 @@ def generate_report(config: dict[str, Any], output_dir: str | None = None) -> No
     if output_dir is None:
         output_dir = str(config.get("reporting", {}).get("output_path", "docs/reports"))
 
-    today = datetime.now().strftime("%Y-%m-%d")
+    today = datetime.now(tz=UTC).strftime("%Y-%m-%d")
     report_dir = os.path.join(output_dir, today)
     os.makedirs(report_dir, exist_ok=True)
 
@@ -304,7 +304,7 @@ def run_once(
 ) -> None:
     """1회 실행"""
     print("\n" + "=" * 60)
-    print(f"PriceRadar 실행 시작: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+    print(f"PriceRadar 실행 시작: {datetime.now(tz=UTC).strftime('%Y-%m-%d %H:%M:%S')}")
     print("=" * 60)
 
     # 1. 데이터 수집

@@ -12,7 +12,7 @@ from __future__ import annotations
 import hashlib
 import re
 import time
-from datetime import datetime
+from datetime import UTC, datetime
 from typing import Any
 from urllib.parse import urljoin
 
@@ -160,7 +160,7 @@ class ClienCollector(BaseCollector):
             title=title,
             url=post_url,
             source=self.source_id,
-            collected_at=datetime.now(),
+            collected_at=datetime.now(tz=UTC),
             current_price=price,
             category=category,
             platform="clien",

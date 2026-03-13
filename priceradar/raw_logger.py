@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import json
 from collections.abc import Iterable
-from datetime import datetime
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
@@ -13,7 +13,7 @@ class RawLogger:
 
     def log(self, records: Iterable[dict[str, Any]], *, source_name: str) -> Path:
         """Log scraped product data to JSONL."""
-        date_dir = self.raw_dir / datetime.now().strftime("%Y-%m-%d")
+        date_dir = self.raw_dir / datetime.now(tz=UTC).strftime("%Y-%m-%d")
         date_dir.mkdir(parents=True, exist_ok=True)
 
         file_path = date_dir / f"{source_name}.jsonl"
