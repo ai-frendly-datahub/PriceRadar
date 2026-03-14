@@ -4,16 +4,22 @@ Fallcent Collector - 폴센트 가격 추적 서비스 크롤러
 폴센트(https://fallcent.com)에서 최저가 상품 정보를 수집합니다.
 """
 
+from __future__ import annotations
+
 import re
 from datetime import UTC, datetime
 from typing import Any
 from urllib.parse import parse_qs, urljoin, urlparse
 
 import requests
+import structlog
 from bs4 import BeautifulSoup, Tag
 from tenacity import retry, stop_after_attempt, wait_exponential
 
 from priceradar.collectors.base import BaseCollector, RawItem
+
+
+logger = structlog.get_logger(__name__)
 
 
 class FallcentCollector(BaseCollector):
@@ -44,7 +50,7 @@ class FallcentCollector(BaseCollector):
             return self._parse_products(soup)
 
         except Exception as e:
-            print(f"[{self.source_id}] 수집 실패: {e}")
+            logger.error("collection_failed", source_id=self.source_id, error=str(e))
             return []
 
     @retry(
@@ -65,7 +71,7 @@ class FallcentCollector(BaseCollector):
             response.encoding = "utf-8"
             return response.text
         except Exception as e:
-            print(f"[{self.source_id}] HTML 가져오기 실패 ({url}): {e}")
+            logger.error("html_fetch_failed", source_id=self.source_id, url=url, error=str(e))
             raise
 
     def _parse_products(self, soup: BeautifulSoup) -> list[RawItem]:
@@ -109,10 +115,10 @@ class FallcentCollector(BaseCollector):
                     if item and self.validate_item(item):
                         items.append(item)
                 except Exception as e:
-                    print(f"[{self.source_id}] 상품 파싱 실패: {e}")
+                    logger.warning("product_parse_failed", source_id=self.source_id, error=str(e))
                     continue
 
-        print(f"[{self.source_id}] 총 {len(items)}개 상품 수집 완료")
+        logger.info("collection_complete", source_id=self.source_id, count=len(items))
 
         return items
 
@@ -120,7 +126,7 @@ class FallcentCollector(BaseCollector):
         """단일 상품 정보 파싱"""
         # URL 파싱
         href = link_elem.get("href")
-        if not href:
+        if not isinstance(href, str) or not href:
             return None
 
         product_url = urljoin(self.base_url, href)
@@ -170,8 +176,10 @@ class FallcentCollector(BaseCollector):
         # 이미지 URL 추출
         img_elem = link_elem.find("img")
         image_url = None
-        if img_elem and img_elem.get("src"):
-            image_url = urljoin(self.base_url, img_elem.get("src"))
+        if img_elem:
+            img_src = img_elem.get("src")
+            if isinstance(img_src, str) and img_src:
+                image_url = urljoin(self.base_url, img_src)
 
         # 로켓배송 여부 확인
         is_rocket = False

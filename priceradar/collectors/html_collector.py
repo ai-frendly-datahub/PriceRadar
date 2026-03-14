@@ -163,7 +163,7 @@ class HtmlCollector(BaseCollector):
             return None
 
         href = found.get("href")
-        if not href:
+        if not isinstance(href, str) or not href:
             return None
 
         # 절대 URL로 변환
@@ -214,7 +214,7 @@ class HtmlCollector(BaseCollector):
 
         # img 태그의 src 또는 data-src
         img_url = found.get("src") or found.get("data-src")
-        if img_url:
+        if isinstance(img_url, str) and img_url:
             return urljoin(self.url, img_url)
         return None
 

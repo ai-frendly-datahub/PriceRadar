@@ -128,9 +128,10 @@ class DealbadaCollector(BaseCollector):
         if not title:
             return None
 
-        deal_href = title_elem.get("href", "")
-        if not deal_href:
+        deal_href_value = title_elem.get("href")
+        if not isinstance(deal_href_value, str) or not deal_href_value:
             return None
+        deal_href = deal_href_value
 
         deal_url = urljoin(self.base_url, deal_href)
 
@@ -160,9 +161,9 @@ class DealbadaCollector(BaseCollector):
         image_elem = deal_elem.select_one("img.product-image, img.deal-image")
         image_url = None
         if image_elem:
-            image_url = image_elem.get("src") or image_elem.get("data-src")
-            if image_url:
-                image_url = urljoin(self.base_url, image_url)
+            raw_image_url = image_elem.get("src") or image_elem.get("data-src")
+            if isinstance(raw_image_url, str) and raw_image_url:
+                image_url = urljoin(self.base_url, raw_image_url)
 
         return RawItem(
             product_id=product_id,

@@ -128,9 +128,10 @@ class ClienCollector(BaseCollector):
         if not title:
             return None
 
-        post_href = title_elem.get("href", "")
-        if not post_href:
+        post_href_value = title_elem.get("href")
+        if not isinstance(post_href_value, str) or not post_href_value:
             return None
+        post_href = post_href_value
 
         post_url = urljoin(self.base_url, post_href)
 
