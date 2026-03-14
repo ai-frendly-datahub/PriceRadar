@@ -2,6 +2,8 @@
 HTML 수집기 - BeautifulSoup 기반 웹 페이지 크롤링
 """
 
+from __future__ import annotations
+
 import hashlib
 import re
 from datetime import UTC, datetime
@@ -9,9 +11,13 @@ from typing import Any
 from urllib.parse import urljoin, urlparse
 
 import requests
+import structlog
 from bs4 import BeautifulSoup, Tag
 
 from priceradar.collectors.base import BaseCollector, RawItem
+
+
+logger = structlog.get_logger(__name__)
 
 
 class HtmlCollector(BaseCollector):
@@ -35,7 +41,7 @@ class HtmlCollector(BaseCollector):
             return self._parse_items(soup, self.url)
 
         except Exception as e:
-            print(f"[{self.source_id}] 수집 실패: {e}")
+            logger.error("collection_failed", source_id=self.source_id, error=str(e))
             return []
 
     def _fetch_html(self, url: str) -> str | None:
@@ -48,7 +54,7 @@ class HtmlCollector(BaseCollector):
             response.encoding = response.apparent_encoding
             return response.text
         except Exception as e:
-            print(f"[{self.source_id}] HTML 가져오기 실패 ({url}): {e}")
+            logger.error("html_fetch_failed", source_id=self.source_id, url=url, error=str(e))
             return None
 
     def _parse_items(self, soup: BeautifulSoup, base_url: str) -> list[RawItem]:
@@ -60,7 +66,11 @@ class HtmlCollector(BaseCollector):
         if container_selector:
             container = soup.select_one(container_selector)
             if not container:
-                print(f"[{self.source_id}] 컨테이너를 찾을 수 없음: {container_selector}")
+                logger.warning(
+                    "container_not_found",
+                    source_id=self.source_id,
+                    selector=container_selector,
+                )
                 return []
         else:
             container = soup
@@ -70,10 +80,10 @@ class HtmlCollector(BaseCollector):
         item_elements = container.select(item_selector)
 
         if not item_elements:
-            print(f"[{self.source_id}] 아이템을 찾을 수 없음: {item_selector}")
+            logger.warning("items_not_found", source_id=self.source_id, selector=item_selector)
             return []
 
-        print(f"[{self.source_id}] {len(item_elements)}개 아이템 발견")
+        logger.info("items_found", source_id=self.source_id, count=len(item_elements))
 
         for elem in item_elements:
             try:
@@ -81,7 +91,7 @@ class HtmlCollector(BaseCollector):
                 if item and self.validate_item(item):
                     items.append(item)
             except Exception as e:
-                print(f"[{self.source_id}] 아이템 파싱 실패: {e}")
+                logger.warning("item_parse_failed", source_id=self.source_id, error=str(e))
                 continue
 
         return items

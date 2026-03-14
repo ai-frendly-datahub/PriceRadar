@@ -17,10 +17,14 @@ from typing import Any
 from urllib.parse import urljoin
 
 import requests
+import structlog
 from bs4 import BeautifulSoup, Tag
 from tenacity import retry, stop_after_attempt, wait_exponential
 
 from priceradar.collectors.base import BaseCollector, RawItem
+
+
+logger = structlog.get_logger(__name__)
 
 
 class ClienCollector(BaseCollector):
@@ -55,7 +59,9 @@ class ClienCollector(BaseCollector):
             try:
                 html_content = self._fetch_html(page_url)
             except Exception as e:
-                print(f"[{self.source_id}] 페이지 로드 실패 ({page_url}): {e}")
+                logger.error(
+                    "page_load_failed", source_id=self.source_id, url=page_url, error=str(e)
+                )
                 break
 
             if not html_content:
@@ -80,10 +86,14 @@ class ClienCollector(BaseCollector):
                 items.append(item)
 
                 if len(items) >= self.max_items:
-                    print(f"[{self.source_id}] 최대 수집 수 도달: {self.max_items}")
+                    logger.info(
+                        "max_items_reached",
+                        source_id=self.source_id,
+                        max_items=self.max_items,
+                    )
                     return items
 
-        print(f"[{self.source_id}] 총 {len(items)}개 상품 수집 완료")
+        logger.info("collection_complete", source_id=self.source_id, count=len(items))
         return items
 
     @retry(
@@ -105,7 +115,7 @@ class ClienCollector(BaseCollector):
             response.encoding = "utf-8"
             return response.text
         except Exception as e:
-            print(f"[{self.source_id}] HTML 가져오기 실패 ({url}): {e}")
+            logger.error("html_fetch_failed", source_id=self.source_id, url=url, error=str(e))
             raise
 
     def _parse_post(self, post_elem: Tag) -> RawItem | None:

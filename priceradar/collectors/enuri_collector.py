@@ -4,6 +4,8 @@ Enuri Collector - 에누리 가격비교 사이트 크롤러
 에누리(https://www.enuri.com)에서 최저가 상품 정보를 수집합니다.
 """
 
+from __future__ import annotations
+
 import hashlib
 import json
 import re
@@ -12,10 +14,14 @@ from typing import Any
 from urllib.parse import urljoin, urlparse
 
 import requests
+import structlog
 from bs4 import BeautifulSoup
 from tenacity import retry, stop_after_attempt, wait_exponential
 
 from priceradar.collectors.base import BaseCollector, RawItem
+
+
+logger = structlog.get_logger(__name__)
 
 
 class EnuriCollector(BaseCollector):
@@ -46,7 +52,7 @@ class EnuriCollector(BaseCollector):
         try:
             items = self._collect_from_best_goods_api()
             if items:
-                print(f"[{self.source_id}] {len(items)}개 상품 수집 완료")
+                logger.info("collection_complete", source_id=self.source_id, count=len(items))
                 return items
 
             html_content = self._fetch_html(self.url)
@@ -58,11 +64,11 @@ class EnuriCollector(BaseCollector):
             # JavaScript 데이터 추출
             items = self._parse_js_data(soup)
 
-            print(f"[{self.source_id}] {len(items)}개 상품 수집 완료")
+            logger.info("collection_complete", source_id=self.source_id, count=len(items))
             return items
 
         except Exception as e:
-            print(f"[{self.source_id}] 수집 실패: {e}")
+            logger.error("collection_failed", source_id=self.source_id, error=str(e))
             return []
 
     def _collect_from_best_goods_api(self) -> list[RawItem]:
@@ -72,7 +78,7 @@ class EnuriCollector(BaseCollector):
         try:
             first_payload = self._fetch_best_goods(0)
         except Exception as e:
-            print(f"[{self.source_id}] BestGoods API 호출 실패: {e}")
+            logger.error("bestgoods_api_failed", source_id=self.source_id, error=str(e))
             return []
 
         payloads = [first_payload]
@@ -82,7 +88,12 @@ class EnuriCollector(BaseCollector):
             try:
                 payloads.append(self._fetch_best_goods(spm_code))
             except Exception as e:
-                print(f"[{self.source_id}] BestGoods API 탭 호출 실패 ({spm_code}): {e}")
+                logger.warning(
+                    "bestgoods_tab_failed",
+                    source_id=self.source_id,
+                    spm_code=spm_code,
+                    error=str(e),
+                )
 
         for payload in payloads:
             product_list = self._extract_best_goods_list(payload)
@@ -248,7 +259,7 @@ class EnuriCollector(BaseCollector):
             response.encoding = "utf-8"
             return response.text
         except Exception as e:
-            print(f"[{self.source_id}] HTML 가져오기 실패 ({url}): {e}")
+            logger.error("html_fetch_failed", source_id=self.source_id, url=url, error=str(e))
             raise
 
     def _parse_js_data(self, soup: BeautifulSoup) -> list[RawItem]:
@@ -260,14 +271,14 @@ class EnuriCollector(BaseCollector):
 
         # BeautifulSoup 객체 유효성 검증
         if soup is None:
-            print(f"[{self.source_id}] BeautifulSoup 객체가 None 입니다")
+            logger.error("beautifulsoup_none", source_id=self.source_id)
             return items
 
         # <script> 태그들을 탐색하여 jsonPopGoods 찾기
         script_tags = soup.find_all("script")
 
         if not script_tags:
-            print(f"[{self.source_id}] script 태그를 찾을 수 없습니다")
+            logger.warning("script_tag_not_found", source_id=self.source_id)
             return items
 
         for script in script_tags:
@@ -355,7 +366,7 @@ class EnuriCollector(BaseCollector):
                 },
             )
         except Exception as e:
-            print(f"[{self.source_id}] BestGoods 상품 파싱 실패: {e}")
+            logger.warning("bestgoods_parse_failed", source_id=self.source_id, error=str(e))
             return None
 
     def _extract_json_var(self, script_content: str | None, var_name: str) -> Any:
@@ -389,7 +400,12 @@ class EnuriCollector(BaseCollector):
                         continue
 
         except Exception as e:
-            print(f"[{self.source_id}] 변수 추출 실패 ({var_name}): {e}")
+            logger.warning(
+                "variable_extraction_failed",
+                source_id=self.source_id,
+                var_name=var_name,
+                error=str(e),
+            )
 
         return None
 
@@ -419,7 +435,12 @@ class EnuriCollector(BaseCollector):
 
             return price
         except (TypeError, ValueError, AttributeError) as e:
-            print(f"[{self.source_id}] 가격 파싱 실패 ({value}): {e}")
+            logger.warning(
+                "price_parse_failed",
+                source_id=self.source_id,
+                value=value,
+                error=str(e),
+            )
             return None
 
     def _parse_discount_rate(self, value: Any) -> float | None:
@@ -452,7 +473,12 @@ class EnuriCollector(BaseCollector):
 
             return numeric_value
         except (TypeError, ValueError, AttributeError) as e:
-            print(f"[{self.source_id}] 할인율 파싱 실패 ({value}): {e}")
+            logger.warning(
+                "discount_parse_failed",
+                source_id=self.source_id,
+                value=value,
+                error=str(e),
+            )
             return None
 
     def _parse_product_from_json(self, product_data: dict[str, Any] | None) -> RawItem | None:
@@ -520,7 +546,7 @@ class EnuriCollector(BaseCollector):
             return raw_item
 
         except Exception as e:
-            print(f"[{self.source_id}] 상품 파싱 실패: {e}")
+            logger.warning("product_parse_failed", source_id=self.source_id, error=str(e))
             return None
 
     def _generate_product_id(self, url: str) -> str:

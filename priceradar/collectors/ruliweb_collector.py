@@ -7,10 +7,14 @@ from typing import Any
 from urllib.parse import parse_qs, urlencode, urljoin, urlparse, urlunparse
 
 import requests
+import structlog
 from bs4 import BeautifulSoup, Tag
 from tenacity import retry, stop_after_attempt, wait_exponential
 
 from priceradar.collectors.base import BaseCollector, RawItem
+
+
+logger = structlog.get_logger(__name__)
 
 
 class RuliwebCollector(BaseCollector):
@@ -48,7 +52,9 @@ class RuliwebCollector(BaseCollector):
             try:
                 html_content = self._fetch_html(page_url)
             except Exception as exc:
-                print(f"[{self.source_id}] 페이지 수집 실패 ({page_url}): {exc}")
+                logger.error(
+                    "page_collect_failed", source_id=self.source_id, url=page_url, error=str(exc)
+                )
                 break
 
             soup = BeautifulSoup(html_content, "html.parser")
@@ -85,7 +91,7 @@ class RuliwebCollector(BaseCollector):
             if self.delay_between_requests > 0:
                 time.sleep(self.delay_between_requests)
 
-        print(f"[{self.source_id}] {len(items)}개 게시글 수집 완료")
+        logger.info("collection_complete", source_id=self.source_id, count=len(items))
         return items
 
     @retry(

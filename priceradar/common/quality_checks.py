@@ -8,6 +8,10 @@ from __future__ import annotations
 from typing import cast
 
 import duckdb
+import structlog
+
+
+logger = structlog.get_logger(__name__)
 
 
 def _quote_identifier(identifier: str) -> str:
@@ -50,7 +54,7 @@ def _to_optional_float(value: object) -> float | None:
 
 
 def _print_section(title: str) -> None:
-    print(f"\n=== {title} ===\n")
+    logger.info("quality_check_section", title=title)
 
 
 def check_missing_fields(
@@ -65,7 +69,7 @@ def check_missing_fields(
     )
 
     if total == 0:
-        print("No records found.")
+        logger.warning("no_records_found")
         return
 
     for field, condition in null_conditions.items():
@@ -76,7 +80,9 @@ def check_missing_fields(
             )[0]
         )
         ratio = (count / total) * 100
-        print(f"  {field}: {count} / {total} ({ratio:.1f}%)")
+        logger.info(
+            "missing_field_ratio", field=field, count=count, total=total, ratio=round(ratio, 1)
+        )
 
 
 def check_duplicate_urls(
@@ -107,11 +113,11 @@ def check_duplicate_urls(
     ]
 
     if not rows:
-        print("No duplicate URLs found.")
+        logger.info("no_duplicate_urls")
         return
 
     for url_value, cnt in rows:
-        print(f"  {cnt}x: {url_value}")
+        logger.warning("duplicate_url", count=cnt, url=url_value)
 
 
 def check_text_lengths(
@@ -123,7 +129,7 @@ def check_text_lengths(
     _print_section("Text Length Statistics")
 
     if not text_columns:
-        print("No text columns provided.")
+        logger.warning("no_text_columns_provided")
         return
 
     for column in text_columns:
@@ -143,7 +149,7 @@ def check_text_lengths(
         max_len = _to_optional_int(max_len_raw)
 
         avg_text = "N/A" if avg_len is None else f"{avg_len:.1f}"
-        print(f"  {column}: avg/min/max = {avg_text} / {min_len} / {max_len}")
+        logger.info("text_length_stats", column=column, avg=avg_text, min=min_len, max=max_len)
 
 
 def check_language_values(
@@ -171,12 +177,12 @@ def check_language_values(
     ]
 
     if not rows:
-        print("No language values found.")
+        logger.warning("no_language_values")
         return
 
-    print("Distribution:")
+    logger.info("language_distribution_start")
     for language_value, cnt in rows:
-        print(f"  {language_value}: {cnt}")
+        logger.info("language_distribution", language=language_value, count=cnt)
 
     if allowed_languages is None:
         return
@@ -188,11 +194,11 @@ def check_language_values(
     ]
 
     if invalid:
-        print("Invalid language values:")
+        logger.warning("invalid_language_values_found")
         for language_value, cnt in invalid:
-            print(f"  {language_value}: {cnt}")
+            logger.warning("invalid_language_value", language=language_value, count=cnt)
     else:
-        print("All language values are allowed.")
+        logger.info("all_languages_valid")
 
 
 def check_dates(
@@ -224,9 +230,7 @@ def check_dates(
         """,
     )
 
-    print(f"  oldest: {oldest}")
-    print(f"  newest: {newest}")
-    print(f"  future dates: {future_count}")
+    logger.info("date_range", oldest=str(oldest), newest=str(newest), future_count=future_count)
 
 
 def run_all_checks(
@@ -243,7 +247,7 @@ def run_all_checks(
     total = _to_int(
         _fetchone_required(con, f"SELECT COUNT(*) FROM {_quote_identifier(table_name)}")[0]
     )
-    print(f"Total records: {total}")
+    logger.info("total_records", total=total)
 
     check_missing_fields(con, table_name=table_name, null_conditions=null_conditions)
     check_duplicate_urls(con, table_name=table_name, url_column=url_column)

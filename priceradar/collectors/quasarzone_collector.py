@@ -8,10 +8,14 @@ from typing import Any
 from urllib.parse import parse_qs, urlencode, urljoin, urlparse, urlunparse
 
 import requests
+import structlog
 from bs4 import BeautifulSoup, Tag
 from tenacity import retry, stop_after_attempt, wait_exponential
 
 from priceradar.collectors.base import BaseCollector, RawItem
+
+
+logger = structlog.get_logger(__name__)
 
 
 class QuasarzoneCollector(BaseCollector):
@@ -64,11 +68,17 @@ class QuasarzoneCollector(BaseCollector):
 
         while len(items) < limit and pages_crawled < self.max_pages:
             pages_crawled += 1
+            page_url = self._build_page_url(current_page)
 
             try:
                 html_content = self._fetch_page(current_page)
             except Exception as e:
-                print(f"[{self.source_id}] 페이지 수집 실패 ({current_page}): {e}")
+                logger.error(
+                    "page_collect_failed",
+                    source_id=self.source_id,
+                    url=page_url,
+                    error=str(e),
+                )
                 break
 
             page_items = self._parse_posts(html_content)
@@ -142,7 +152,7 @@ class QuasarzoneCollector(BaseCollector):
             try:
                 item = self._parse_post(post_elem)
             except Exception as e:
-                print(f"[{self.source_id}] 게시글 파싱 실패: {e}")
+                logger.warning("post_parse_failed", source_id=self.source_id, error=str(e))
                 continue
 
             if item:
