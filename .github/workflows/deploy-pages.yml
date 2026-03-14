@@ -1,12 +1,10 @@
 name: Deploy to GitHub Pages
 
 on:
-  push:
-    branches:
-      - main
-    paths:
-      - 'docs/reports/**'
   workflow_dispatch:
+  workflow_run:
+    workflows: ["Radar Crawler (Optimized)"]
+    types: [completed]
 
 permissions:
   contents: write
@@ -18,6 +16,7 @@ concurrency:
 jobs:
   deploy:
     runs-on: ubuntu-latest
+    if: ${{ github.event.workflow_run.conclusion == 'success' || github.event_name == 'workflow_dispatch' }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
