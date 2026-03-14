@@ -15,12 +15,6 @@ import feedparser
 import requests
 from pybreaker import CircuitBreakerError
 from requests.adapters import HTTPAdapter
-from tenacity import (
-    retry,
-    retry_if_exception_type,
-    stop_after_attempt,
-    wait_exponential,
-)
 from urllib3.util.retry import Retry
 
 from .exceptions import NetworkError, ParseError, SourceError
@@ -31,6 +25,34 @@ from .resilience import get_circuit_breaker_manager
 _DEFAULT_HEADERS: dict[str, str] = {
     "User-Agent": "Mozilla/5.0 (compatible; RadarTemplateBot/1.0; +https://github.com/zzragida/ai-frendly-datahub)",
 }
+_DEFAULT_HEALTH_DB_PATH = "data/radar_data.duckdb"
+_COLLECTION_CONTROL_LOCK = threading.Lock()
+_ACTIVE_THROTTLER: Any | None = None
+_ACTIVE_HEALTH_STORE: Any | None = None
+
+
+def _load_adaptive_controls() -> tuple[type[Any], type[Any]]:
+    module = __import__("radar_core", fromlist=["AdaptiveThrottler", "CrawlHealthStore"])
+    return module.AdaptiveThrottler, module.CrawlHealthStore
+
+
+def _set_collection_controls(throttler: Any, health_store: Any) -> None:
+    global _ACTIVE_THROTTLER, _ACTIVE_HEALTH_STORE
+    with _COLLECTION_CONTROL_LOCK:
+        _ACTIVE_THROTTLER = throttler
+        _ACTIVE_HEALTH_STORE = health_store
+
+
+def _clear_collection_controls() -> None:
+    global _ACTIVE_THROTTLER, _ACTIVE_HEALTH_STORE
+    with _COLLECTION_CONTROL_LOCK:
+        _ACTIVE_THROTTLER = None
+        _ACTIVE_HEALTH_STORE = None
+
+
+def _get_collection_controls() -> tuple[Any | None, Any | None]:
+    with _COLLECTION_CONTROL_LOCK:
+        return _ACTIVE_THROTTLER, _ACTIVE_HEALTH_STORE
 
 
 class RateLimiter:
@@ -84,25 +106,73 @@ def _fetch_url_with_retry(
     timeout: int,
     headers: dict[str, str] | None = None,
     session: requests.Session | None = None,
+    source_name: str | None = None,
+    throttler: Any | None = None,
+    health_store: Any | None = None,
+    max_attempts: int = 3,
 ) -> requests.Response:
     """Fetch URL with retry logic on transient errors."""
     merged = {**_DEFAULT_HEADERS, **(headers or {})}
+    if throttler is None or health_store is None:
+        active_throttler, active_health_store = _get_collection_controls()
+        throttler = throttler or active_throttler
+        health_store = health_store or active_health_store
 
-    @retry(
-        stop=stop_after_attempt(3),
-        wait=wait_exponential(multiplier=1, min=1, max=10),
-        retry=retry_if_exception_type(requests.exceptions.RequestException),
-        reraise=True,
+    retryable_errors = (
+        requests.exceptions.Timeout,
+        requests.exceptions.ConnectionError,
+        requests.exceptions.HTTPError,
     )
-    def _fetch() -> requests.Response:
-        if session is not None:
-            response = session.get(url, timeout=timeout, headers=merged)
-        else:
-            response = requests.get(url, timeout=timeout, headers=merged)
-        response.raise_for_status()
-        return response
 
-    return _fetch()
+    for attempt in range(max_attempts):
+        if source_name is not None and throttler is not None:
+            throttler.acquire(source_name)
+
+        try:
+            if session is not None:
+                response = session.get(url, timeout=timeout, headers=merged)
+            else:
+                response = requests.get(url, timeout=timeout, headers=merged)
+            response.raise_for_status()
+
+            if source_name is not None and throttler is not None:
+                throttler.record_success(source_name)
+                if health_store is not None:
+                    delay = throttler.get_current_delay(source_name)
+                    health_store.record_success(source_name, delay)
+
+            return response
+        except retryable_errors as exc:
+            if source_name is not None and throttler is not None:
+                retry_after: int | str | None = None
+                if isinstance(exc, requests.exceptions.HTTPError):
+                    response = exc.response
+                    if response is not None and response.status_code == 429:
+                        retry_after = _parse_retry_after(response.headers.get("Retry-After"))
+
+                throttler.record_failure(source_name, retry_after=retry_after)
+                if health_store is not None:
+                    delay = throttler.get_current_delay(source_name)
+                    health_store.record_failure(source_name, str(exc), delay)
+
+            if attempt == max_attempts - 1:
+                raise
+
+    raise RuntimeError("Retry loop exited unexpectedly")
+
+
+def _parse_retry_after(value: str | None) -> int | str | None:
+    if value is None:
+        return None
+
+    stripped = value.strip()
+    if not stripped:
+        return None
+
+    if stripped.isdigit():
+        return int(stripped)
+
+    return stripped
 
 
 def collect_sources(
@@ -113,6 +183,7 @@ def collect_sources(
     timeout: int = 15,
     min_interval_per_host: float = 0.5,
     max_workers: int | None = None,
+    health_db_path: str | None = None,
 ) -> tuple[list[Article], list[str]]:
     """Fetch items from all configured sources, returning articles and errors."""
     articles: list[Article] = []
@@ -125,9 +196,18 @@ def collect_sources(
     rate_limiters: dict[str, RateLimiter] = {
         host: RateLimiter(min_interval=min_interval_per_host) for host in set(source_hosts.values())
     }
+    throttler_cls, health_store_cls = _load_adaptive_controls()
+    throttler = throttler_cls(min_delay=max(0.001, min_interval_per_host))
+    health_store = health_store_cls(
+        health_db_path or os.environ.get("RADAR_CRAWL_HEALTH_DB_PATH", _DEFAULT_HEALTH_DB_PATH)
+    )
+    _set_collection_controls(throttler, health_store)
     session = _create_session()
 
     def _collect_for_source(source: Source) -> tuple[list[Article], list[str]]:
+        if health_store.is_disabled(source.name):
+            return [], [f"{source.name}: Source disabled (crawl health threshold reached)"]
+
         host = source_hosts[source.name]
         rate_limiters[host].acquire()
 
@@ -169,6 +249,8 @@ def collect_sources(
                     errors.extend(source_errors)
     finally:
         session.close()
+        health_store.close()
+        _clear_collection_controls()
 
     return articles, errors
 
@@ -185,7 +267,12 @@ def _collect_single(
         raise SourceError(source.name, f"Unsupported source type '{source.type}'")
 
     try:
-        response = _fetch_url_with_retry(source.url, timeout, session=session)
+        response = _fetch_url_with_retry(
+            source.url,
+            timeout,
+            session=session,
+            source_name=source.name,
+        )
     except (requests.exceptions.Timeout, requests.exceptions.ConnectionError) as exc:
         raise NetworkError(f"Network error fetching {source.name}: {exc}") from exc
     except requests.exceptions.RequestException as exc:
