@@ -3,88 +3,130 @@
 
 sources:
   # ===== 폴센트 (Fallcent) - 쿠팡 전문 가격 추적 =====
-  - id: fallcent_main
-    name: "폴센트 메인"
-    type: fallcent
-    url: "https://fallcent.com/"
-    enabled: true
-    trust_tier: T2_expert
-    collector_type: C3_fallcent
-    category: all
-    description: "폴센트 메인 페이지 - 16개 카테고리 전체 수집 (식품, 생활, 가전, 뷰티 등)"
+   - id: fallcent_main
+     name: "폴센트 메인"
+     type: fallcent
+     url: "https://fallcent.com/"
+     enabled: true
+     trust_tier: T2_expert
+     collector_type: C3_fallcent
+     category: all
+     description: "폴센트 메인 페이지 - 16개 카테고리 전체 수집 (식품, 생활, 가전, 뷰티 등)"
 
-  # ===== 에누리 (Enuri) - 종합 가격 비교 =====
-  - id: enuri_main
-    name: "에누리 메인"
-    type: enuri
-    url: "https://www.enuri.com/"
-    enabled: true
-    trust_tier: T2_expert
-    collector_type: C3_enuri
-    category: all
-    description: "에누리 메인 페이지 - 인기 상품"
+   # ===== 에누리 (Enuri) - 종합 가격 비교 =====
+   - id: enuri_main
+     name: "에누리 메인"
+     type: enuri
+     url: "https://www.enuri.com/"
+     enabled: true
+     trust_tier: T2_expert
+     collector_type: C3_enuri
+     category: all
+     description: "에누리 메인 페이지 - 인기 상품"
 
-  # ===== 알구몬 (Algumon) - 실시간 핫딜 큐레이션 =====
-  - id: algumon_main
-    name: "알구몬 메인"
-    type: algumon
-    url: "https://www.algumon.com/"
-    enabled: true
-    trust_tier: T2_expert
-    collector_type: C3_algumon
-    category: electronics
-    request_delay: 1.0
-    max_items: 120
-    list_endpoints:
-      - path: "/more"
-        list_type: latest
-        max_pages: 2
-      - path: "/deal/rank/yesterday/more"
-        list_type: yesterday_rank
-        max_pages: 1
-      - path: "/deal/toomuchlike/10/more"
-        list_type: too_much_like
-        max_pages: 1
-      - path: "/deal/toomuchtalk/50/more"
-        list_type: too_much_talk
-        max_pages: 1
-    description: "알구몬 실시간 핫딜 수집 (최신/어제랭크/추천/댓글)"
+   # ===== 알구몬 (Algumon) - 실시간 핫딜 큐레이션 =====
+   - id: algumon_main
+     name: "알구몬 메인"
+     type: algumon
+     url: "https://www.algumon.com/"
+     enabled: true
+     trust_tier: T2_expert
+     collector_type: C3_algumon
+     category: electronics
+     request_delay: 1.0
+     max_items: 120
+     list_endpoints:
+       - path: "/more"
+         list_type: latest
+         max_pages: 2
+       - path: "/deal/rank/yesterday/more"
+         list_type: yesterday_rank
+         max_pages: 1
+       - path: "/deal/toomuchlike/10/more"
+         list_type: too_much_like
+         max_pages: 1
+       - path: "/deal/toomuchtalk/50/more"
+         list_type: too_much_talk
+         max_pages: 1
+     description: "알구몬 실시간 핫딜 수집 (최신/어제랭크/추천/댓글)"
 
-  - id: ruliweb_market
-    name: "루리웹 장터"
-    type: ruliweb
-    url: "https://bbs.ruliweb.com/market/board/1020"
-    enabled: true
-    trust_tier: T2_expert
-    collector_type: C3_ruliweb
-    category: market
-    max_pages: 5
-    delay_between_requests: 0.5
-    description: "루리웹 장터 게시판 - 게임/IT/디지털 세일 및 중고 거래"
+   - id: ruliweb_market
+     name: "루리웹 장터"
+     type: ruliweb
+     url: "https://bbs.ruliweb.com/market/board/1020"
+     enabled: true
+     trust_tier: T2_expert
+     collector_type: C3_ruliweb
+     category: market
+     max_pages: 5
+     delay_between_requests: 0.5
+     description: "루리웹 장터 게시판 - 게임/IT/디지털 세일 및 중고 거래"
 
-  - id: quasarzone_saleinfo
-    name: "퀘이사존 핫딜"
-    type: quasarzone
-    url: "https://quasarzone.com/bbs/qb_saleinfo"
-    enabled: true
-    trust_tier: T2_expert
-    collector_type: C3_quasarzone
-    category: electronics
-    max_pages: 10
-    request_delay: 1.0
-    description: "퀘이사존 세일 정보 게시판 - IT/가전/디지털 할인 정보"
+   - id: quasarzone_saleinfo
+     name: "퀘이사존 핫딜"
+     type: quasarzone
+     url: "https://quasarzone.com/bbs/qb_saleinfo"
+     enabled: true
+     trust_tier: T2_expert
+     collector_type: C3_quasarzone
+     category: electronics
+     max_pages: 10
+     request_delay: 1.0
+     description: "퀘이사존 세일 정보 게시판 - IT/가전/디지털 할인 정보"
 
-  # 카테고리별 소스 (필요시 활성화)
-  # - id: enuri_electronics
-  #   name: "에누리 가전/TV"
-  #   type: enuri
-  #   url: "https://www.enuri.com/m/cpp.jsp?tab=enuri&gcate=1"
-  #   enabled: false
-  #   trust_tier: T2_expert
-  #   collector_type: C3_enuri_category
-  #   category: electronics
-  #   category_code: 1
-  #   description: "에누리 가전/TV 카테고리"
+   # ===== 클리앙 (Clien) - 알뜰구매 게시판 =====
+   - id: clien_albulgumai
+     name: "클리앙 알뜰구매"
+     type: clien
+     url: "https://www.clien.net/service/board/park"
+     enabled: true
+     trust_tier: T2_expert
+     collector_type: C3_clien
+     category: market
+     request_delay: 1.0
+     max_items: 100
+     max_pages: 5
+     description: "클리앙 알뜰구매 게시판 - 핫딜 정보"
+
+   # ===== 펨코 (FMKorea) - 핫딜 게시판 =====
+   - id: fmkorea_hotdeal
+     name: "펨코 핫딜"
+     type: fmkorea
+     url: "https://www.fmkorea.com/hotdeal"
+     enabled: true
+     trust_tier: T2_expert
+     collector_type: C3_fmkorea
+     category: market
+     request_delay: 1.0
+     max_items: 200
+     max_pages: 10
+     description: "펨코 핫딜 게시판 - 여성 커뮤니티 기반 핫딜 정보"
+
+   # ===== 딜바다 (Dealbada) - 핫딜 정보 =====
+   - id: dealbada_main
+     name: "딜바다"
+     type: dealbada
+     url: "https://www.dealbada.com/hotdeal"
+     enabled: true
+     trust_tier: T2_expert
+     collector_type: C3_dealbada
+     category: market
+     request_delay: 1.0
+     max_items: 100
+     max_pages: 5
+     description: "딜바다 - 다양한 쇼핑몰의 핫딜 정보 통합"
+
+   # 카테고리별 소스 (필요시 활성화)
+   # - id: enuri_electronics
+   #   name: "에누리 가전/TV"
+   #   type: enuri
+   #   url: "https://www.enuri.com/m/cpp.jsp?tab=enuri&gcate=1"
+   #   enabled: false
+   #   trust_tier: T2_expert
+   #   collector_type: C3_enuri_category
+   #   category: electronics
+   #   category_code: 1
+   #   description: "에누리 가전/TV 카테고리"
 
 # 카테고리 정의
 category_mappings:
@@ -116,47 +158,3 @@ platforms:
     name: "11번가"
     domain: "11st.co.kr"
 
-
-# 데이터 소스 목록
-sources:
-  # ===== 클리앙 (Clien) - 알뜰구매 게시판 =====
-  - id: clien_albulgumai
-    name: "클리앙 알뜰구매"
-    type: clien
-    url: "https://www.clien.net/service/board/park"
-    enabled: true
-    trust_tier: T2_expert
-    collector_type: C3_clien
-    category: market
-    request_delay: 1.0
-    max_items: 100
-    max_pages: 5
-    description: "클리앙 알뜰구매 게시판 - 핫딜 정보"
-
-  # ===== 펨코 (FMKorea) - 핫딜 게시판 =====
-  - id: fmkorea_hotdeal
-    name: "펨코 핫딜"
-    type: fmkorea
-    url: "https://www.fmkorea.com/hotdeal"
-    enabled: true
-    trust_tier: T2_expert
-    collector_type: C3_fmkorea
-    category: market
-    request_delay: 1.0
-    max_items: 200
-    max_pages: 10
-    description: "펨코 핫딜 게시판 - 여성 커뮤니티 기반 핫딜 정보"
-
-  # ===== 딜바다 (Dealbada) - 핫딜 정보 =====
-  - id: dealbada_main
-    name: "딜바다"
-    type: dealbada
-    url: "https://www.dealbada.com/hotdeal"
-    enabled: true
-    trust_tier: T2_expert
-    collector_type: C3_dealbada
-    category: market
-    request_delay: 1.0
-    max_items: 100
-    max_pages: 5
-    description: "딜바다 - 다양한 쇼핑몰의 핫딜 정보 통합"
