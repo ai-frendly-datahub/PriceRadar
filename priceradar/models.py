@@ -71,3 +71,10 @@ class NotificationConfig:
     webhook_url: str | None = None
     telegram: TelegramSettings | None = None
     rules: dict[str, object] = field(default_factory=dict)
+
+
+@dataclass
+class Deal:
+    price: float
+    category: str
+    collected_at: datetime
