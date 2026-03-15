@@ -13,6 +13,7 @@ from urllib.parse import urlparse
 
 import feedparser
 import requests
+import structlog
 from pybreaker import CircuitBreakerError
 from requests.adapters import HTTPAdapter
 from urllib3.util.retry import Retry
@@ -20,6 +21,8 @@ from urllib3.util.retry import Retry
 from .exceptions import NetworkError, ParseError, SourceError
 from .models import Article, Source
 from .resilience import get_circuit_breaker_manager
+
+logger = structlog.get_logger()
 
 
 _DEFAULT_HEADERS: dict[str, str] = {
@@ -185,13 +188,28 @@ def collect_sources(
     max_workers: int | None = None,
     health_db_path: str | None = None,
 ) -> tuple[list[Article], list[str]]:
-    """Fetch items from all configured sources, returning articles and errors."""
+    """Fetch items from all configured sources, returning articles and errors.
+
+    Uses a 2-pass hybrid collection strategy:
+
+    * **Pass 1** — RSS/feed sources collected in parallel via
+      :class:`~concurrent.futures.ThreadPoolExecutor`.
+    * **Pass 2** — JavaScript/browser sources collected sequentially via
+      Playwright (see :mod:`priceradar.browser_collector`).
+
+    If Playwright is not installed, JS sources are silently skipped with a
+    warning log entry so that RSS-only mode keeps working.
+    """
+    # --- Source splitting ---------------------------------------------------
+    rss_sources = [s for s in sources if s.type.lower() not in ("javascript", "browser")]
+    js_sources = [s for s in sources if s.type.lower() in ("javascript", "browser")]
+
     articles: list[Article] = []
     errors: list[str] = []
     manager = get_circuit_breaker_manager()
     workers = _resolve_max_workers(max_workers)
     source_hosts: dict[str, str] = {
-        source.name: (urlparse(source.url).netloc.lower() or source.name) for source in sources
+        source.name: (urlparse(source.url).netloc.lower() or source.name) for source in rss_sources
     }
     rate_limiters: dict[str, RateLimiter] = {
         host: RateLimiter(min_interval=min_interval_per_host) for host in set(source_hosts.values())
@@ -231,16 +249,17 @@ def collect_sources(
         except Exception as exc:
             return [], [f"{source.name}: Unexpected error - {type(exc).__name__}: {exc}"]
 
+    # --- Pass 1: RSS sources via ThreadPoolExecutor (parallel) --------------
     try:
         if workers == 1:
-            for source in sources:
+            for source in rss_sources:
                 source_articles, source_errors = _collect_for_source(source)
                 articles.extend(source_articles)
                 errors.extend(source_errors)
         else:
             with ThreadPoolExecutor(max_workers=workers) as executor:
                 future_map: list[Future[tuple[list[Article], list[str]]]] = [
-                    executor.submit(_collect_for_source, source) for source in sources
+                    executor.submit(_collect_for_source, source) for source in rss_sources
                 ]
 
                 for future in future_map:
@@ -251,6 +270,24 @@ def collect_sources(
         session.close()
         health_store.close()
         _clear_collection_controls()
+
+    # --- Pass 2: JavaScript/browser sources via Playwright (sequential) -----
+    if js_sources:
+        try:
+            from .browser_collector import collect_browser_sources
+
+            js_articles, js_errors = collect_browser_sources(
+                js_sources, category, health_db_path=health_db_path
+            )
+            articles.extend(js_articles)
+            if js_errors:
+                logger.warning("browser_collection_errors", errors=js_errors)
+        except ImportError:
+            logger.warning(
+                "playwright_unavailable",
+                js_source_count=len(js_sources),
+                hint="pip install 'radar-core[browser]'",
+            )
 
     return articles, errors
 
