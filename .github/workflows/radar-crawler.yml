@@ -11,7 +11,6 @@ permissions:
   id-token: write
 
 env:
-  RADAR_CATEGORY: template  # Update per project
   TZ: Asia/Seoul
   PYTHON_VERSION: "3.11"
 
@@ -49,11 +48,11 @@ jobs:
 
       - name: Run Radar
         run: |
-          python main.py --category "${{ env.RADAR_CATEGORY }}" --recent-days 7 --keep-days 90 --keep-raw-days 180 --keep-report-days 90 --snapshot-db --generate-report
+          python main.py --mode once --report
 
       - name: Generate index.html
         run: |
-          python -c "from priceradar.reporter import generate_index_html; from pathlib import Path; generate_index_html(Path('reports'))"
+          python -c "from priceradar.reporters.html_reporter import generate_index_html; from pathlib import Path; generate_index_html(Path('docs/reports'))"
 
       - name: Run Quality Checks
         if: always()
@@ -83,7 +82,7 @@ jobs:
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}
           publish_branch: gh-pages
-          publish_dir: ./reports
+          publish_dir: ./docs/reports
           user_name: github-actions[bot]
           user_email: github-actions[bot]@users.noreply.github.com
           commit_message: "docs: update radar report"
@@ -94,7 +93,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: radar-db-${{ github.run_number }}
-          path: data/radar_data.duckdb
+          path: data/priceradar.duckdb
           retention-days: 30
           if-no-files-found: ignore
 
@@ -112,16 +111,15 @@ jobs:
         run: |
           echo "## 📊 Radar Collection Summary" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
-          echo "- **Category**: ${{ env.RADAR_CATEGORY }}" >> $GITHUB_STEP_SUMMARY
           echo "- **Run**: ${{ github.run_number }}" >> $GITHUB_STEP_SUMMARY
           echo "- **Timestamp**: $(date +'%Y-%m-%d %H:%M:%S UTC')" >> $GITHUB_STEP_SUMMARY
           echo "- **Status**: ${{ job.status }}" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
-          if [ -f "reports/index.html" ]; then
+          if [ -f "docs/reports/index.html" ]; then
             echo "✅ Report generated successfully" >> $GITHUB_STEP_SUMMARY
           fi
-          if [ -f "data/radar_data.duckdb" ]; then
-            SIZE=$(du -h data/radar_data.duckdb | cut -f1)
+          if [ -f "data/priceradar.duckdb" ]; then
+            SIZE=$(du -h data/priceradar.duckdb | cut -f1)
             echo "✅ Database backed up ($SIZE)" >> $GITHUB_STEP_SUMMARY
           fi
 
