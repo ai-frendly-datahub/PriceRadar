@@ -145,6 +145,17 @@ class QuasarzoneCollector(BaseCollector):
 
     def _parse_posts(self, html_content: str) -> list[RawItem]:
         soup = BeautifulSoup(html_content, "html.parser")
+        if not self._validate_html_schema(
+            soup,
+            {
+                "post_card": "div.market-info-list-cont",
+                "subject_link": "div.market-info-list-cont a.subject-link",
+            },
+            context=self.url,
+        ):
+            logger.warning("schema_invalid_skip_source", source_id=self.source_id, url=self.url)
+            return []
+
         post_elements = soup.select("div.market-info-list-cont")
 
         items: list[RawItem] = []
@@ -238,14 +249,7 @@ class QuasarzoneCollector(BaseCollector):
         )
 
     def _extract_price(self, text: str | None) -> int | None:
-        if not text:
-            return None
-
-        matched = re.search(r"([0-9]{1,3}(?:,[0-9]{3})+|[0-9]+)", text)
-        if not matched:
-            return None
-
-        return int(matched.group(1).replace(",", ""))
+        return self._parse_price_value(text)
 
     def _extract_price_from_title(self, title: str) -> int | None:
         if not title:
@@ -253,17 +257,23 @@ class QuasarzoneCollector(BaseCollector):
 
         won_match = re.search(r"([0-9]{1,3}(?:,[0-9]{3})+|[0-9]{2,})\s*원", title)
         if won_match:
-            return int(won_match.group(1).replace(",", ""))
+            parsed = self._parse_price_value(won_match.group(1))
+            if parsed is not None:
+                return parsed
 
         symbol_match = re.search(r"[₩￦]\s*([0-9]{1,3}(?:,[0-9]{3})+|[0-9]{2,})", title)
         if symbol_match:
-            return int(symbol_match.group(1).replace(",", ""))
+            parsed = self._parse_price_value(symbol_match.group(1))
+            if parsed is not None:
+                return parsed
 
         man_match = re.search(r"([0-9]+(?:\.[0-9]+)?)\s*만(?:원)?", title)
         if man_match:
-            return int(float(man_match.group(1)) * 10000)
+            parsed = self._parse_price_value(float(man_match.group(1)) * 10000)
+            if parsed is not None:
+                return parsed
 
-        return None
+        return self._parse_price_value(title)
 
     def _extract_discount_rate(self, text: str) -> float | None:
         matched = re.search(r"(\d+(?:\.\d+)?)\s*%", text)

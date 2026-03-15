@@ -68,6 +68,17 @@ class DealbadaCollector(BaseCollector):
                 break
 
             soup = BeautifulSoup(html_content, "html.parser")
+            if not self._validate_html_schema(
+                soup,
+                {
+                    "deal_row": "div.deal-item, li.deal-list-item",
+                    "title_link": "a.deal-title, a.product-name",
+                },
+                context=page_url,
+            ):
+                logger.warning("schema_invalid_skip_source", source_id=self.source_id, url=page_url)
+                break
+
             deal_elements = soup.select("div.deal-item, li.deal-list-item")
 
             if not deal_elements:
@@ -190,16 +201,7 @@ class DealbadaCollector(BaseCollector):
             return None
 
         price_text = price_elem.get_text(strip=True)
-        price_match = re.search(r"(\d+(?:,\d{3})*)", price_text)
-
-        if price_match:
-            price_str = price_match.group(1).replace(",", "")
-            try:
-                return int(price_str)
-            except ValueError:
-                return None
-
-        return None
+        return self._parse_price_value(price_text)
 
     def _generate_product_id(self, url: str) -> str:
         """URL 기반 상품 ID 생성"""

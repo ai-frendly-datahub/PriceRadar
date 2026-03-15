@@ -99,6 +99,20 @@ class FallcentCollector(BaseCollector):
             ("문구/오피스", "office"),
         ]
 
+        category_ids = [category_id for category_id, _ in categories]
+        has_category_container = any(
+            soup.find("div", id=category_id) for category_id in category_ids
+        )
+        if not has_category_container:
+            logger.warning(
+                "schema_invalid_skip_source",
+                source_id=self.source_id,
+                missing_elements=[
+                    {"element": "category_container", "selector": "div[id=<category>]"}
+                ],
+            )
+            return []
+
         # 카테고리별로 상품 수집
         for korean_name, english_name in categories:
             category_div = soup.find("div", id=korean_name)
@@ -165,8 +179,7 @@ class FallcentCollector(BaseCollector):
             # 가격 패턴 찾기 (예: "28,660원")
             price_match = re.search(r"(\d{1,3}(?:,\d{3})*)\s*원", line)
             if price_match and not current_price:
-                price_str = price_match.group(1).replace(",", "")
-                current_price = int(price_str)
+                current_price = self._parse_price_value(price_match.group(1))
 
             # 할인율 패턴 찾기 (예: "45%")
             discount_match = re.search(r"(\d+)\s*%", line)

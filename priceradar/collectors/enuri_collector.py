@@ -61,6 +61,14 @@ class EnuriCollector(BaseCollector):
 
             soup = BeautifulSoup(html_content, "html.parser")
 
+            if not self._validate_html_schema(
+                soup,
+                {"script": "script"},
+                context=self.url,
+            ):
+                logger.warning("schema_invalid_skip_source", source_id=self.source_id, url=self.url)
+                return []
+
             # JavaScript 데이터 추출
             items = self._parse_js_data(soup)
 
@@ -414,34 +422,17 @@ class EnuriCollector(BaseCollector):
 
         Returns None if parsing fails or value is invalid.
         """
-        if value is None:
-            return None
-
-        try:
-            raw_value = str(value).replace(",", "").strip()
-            if not raw_value:
-                return None
-
-            # 숫자만 추출
-            matched = re.search(r"\d+", raw_value)
-            if not matched:
-                return None
-
-            price = int(matched.group(0))
-
-            # 유효성 체크: 0 이거나 음수인 경우 None 반환
-            if price <= 0:
-                return None
-
-            return price
-        except (TypeError, ValueError, AttributeError) as e:
+        parsed = self._parse_price_value(value)
+        if parsed is None:
             logger.warning(
                 "price_parse_failed",
                 source_id=self.source_id,
                 value=value,
-                error=str(e),
+                error="invalid_or_missing_price",
             )
             return None
+
+        return parsed
 
     def _parse_discount_rate(self, value: Any) -> float | None:
         """Parse discount rate with robust error handling.

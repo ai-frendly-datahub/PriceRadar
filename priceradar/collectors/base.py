@@ -4,15 +4,18 @@ Base collector 모듈 - 모든 수집기의 기본 인터페이스
 
 import logging
 import os
+import re
 import threading
 import time
 from abc import ABC, abstractmethod
+from collections.abc import Mapping
 from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Any
 from urllib.parse import urlparse
 
 import requests
+from bs4 import BeautifulSoup, Tag
 from requests.adapters import HTTPAdapter
 from urllib3.util.retry import Retry
 
@@ -224,6 +227,71 @@ class BaseCollector(ABC):
             return False
 
         return True
+
+    def _validate_html_schema(
+        self,
+        soup: BeautifulSoup | Tag,
+        required_selectors: Mapping[str, str],
+        *,
+        context: str,
+    ) -> bool:
+        missing: list[dict[str, str]] = []
+        for label, selector in required_selectors.items():
+            cleaned = selector.strip()
+            if not cleaned:
+                continue
+            if soup.select_one(cleaned) is None:
+                missing.append({"element": str(label), "selector": cleaned})
+
+        if missing:
+            logger.warning(
+                "html_schema_validation_failed source_id=%s context=%s missing=%s",
+                self.source_id,
+                context,
+                missing,
+            )
+            return False
+
+        return True
+
+    def _parse_price_value(self, value: Any) -> int | None:
+        if value is None:
+            return None
+
+        if isinstance(value, bool):
+            return None
+
+        if isinstance(value, int):
+            return value if value > 0 else None
+
+        if isinstance(value, float):
+            if value <= 0:
+                return None
+            return int(value)
+
+        text = str(value).strip()
+        if not text:
+            return None
+
+        normalized = text.lower()
+        if normalized in {"n/a", "na", "none", "null", "nan", "-", "--"}:
+            return None
+
+        cleaned = normalized.replace("원", " ")
+        cleaned = re.sub(r"[₩￦$€£¥]", " ", cleaned)
+        cleaned = cleaned.replace(",", " ")
+        cleaned = re.sub(r"\s+", " ", cleaned).strip()
+
+        matched = re.search(r"\d+(?:\.\d+)?", cleaned)
+        if not matched:
+            return None
+
+        try:
+            parsed = int(float(matched.group(0)))
+        except ValueError:
+            return None
+
+        return parsed if parsed > 0 else None
 
 
 def _parse_retry_after(value: str | None) -> int | str | None:

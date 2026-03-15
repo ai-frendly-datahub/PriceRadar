@@ -58,6 +58,17 @@ class RuliwebCollector(BaseCollector):
                 break
 
             soup = BeautifulSoup(html_content, "html.parser")
+            if not self._validate_html_schema(
+                soup,
+                {
+                    "post_row": "tbody tr.table_body",
+                    "subject_link": "tbody tr.table_body a.subject_link",
+                },
+                context=page_url,
+            ):
+                logger.warning("schema_invalid_skip_source", source_id=self.source_id, url=page_url)
+                break
+
             post_rows = soup.select("tbody tr.table_body")
             if not post_rows:
                 break
@@ -258,13 +269,8 @@ class RuliwebCollector(BaseCollector):
         return normalized
 
     def _to_price_value(self, raw_value: str) -> int | None:
-        number_text = raw_value.replace(",", "").strip()
-        if not number_text:
-            return None
-
-        try:
-            value = int(number_text)
-        except ValueError:
+        value = self._parse_price_value(raw_value)
+        if value is None:
             return None
 
         if value < 100:

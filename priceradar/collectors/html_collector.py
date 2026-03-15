@@ -61,6 +61,15 @@ class HtmlCollector(BaseCollector):
         """BeautifulSoup 객체에서 아이템들을 파싱"""
         items: list[RawItem] = []
 
+        required_selectors: dict[str, str] = {}
+        item_selector = self.selectors.get("item", ".product-item")
+        if item_selector:
+            required_selectors["item"] = str(item_selector)
+        for field in ("title", "link"):
+            selector = self.selectors.get(field)
+            if selector:
+                required_selectors[field] = str(selector)
+
         # 컨테이너 선택
         container_selector = self.selectors.get("container")
         if container_selector:
@@ -76,8 +85,15 @@ class HtmlCollector(BaseCollector):
             container = soup
 
         # 아이템 선택
-        item_selector = self.selectors.get("item", ".product-item")
         item_elements = container.select(item_selector)
+
+        if required_selectors and not self._validate_html_schema(
+            container,
+            required_selectors,
+            context=base_url,
+        ):
+            logger.warning("schema_invalid_skip_source", source_id=self.source_id, url=base_url)
+            return []
 
         if not item_elements:
             logger.warning("items_not_found", source_id=self.source_id, selector=item_selector)
@@ -175,14 +191,7 @@ class HtmlCollector(BaseCollector):
             return None
 
         text = self._extract_text(elem, selector)
-        if not text:
-            return None
-
-        # 숫자만 추출
-        numbers = re.sub(r"[^\d]", "", text)
-        if numbers:
-            return int(numbers)
-        return None
+        return self._parse_price_value(text)
 
     def _extract_discount_rate(self, elem: Tag, selector: str | None) -> float | None:
         """할인율 추출 (0.0 ~ 1.0)"""

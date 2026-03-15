@@ -81,6 +81,17 @@ class FmkoreaCollector(BaseCollector):
                 break
 
             soup = BeautifulSoup(html_content, "html.parser")
+            if not self._validate_html_schema(
+                soup,
+                {
+                    "post_row": "div.post-item, tr.list-item",
+                    "post_title_link": "a.post-title, a.subject",
+                },
+                context=page_url,
+            ):
+                logger.warning("schema_invalid_skip_source", source_id=self.source_id, url=page_url)
+                break
+
             post_elements = soup.select("div.post-item, tr.list-item")
 
             if not post_elements:
@@ -206,13 +217,11 @@ class FmkoreaCollector(BaseCollector):
         for pattern in price_patterns:
             match = re.search(pattern, title)
             if match:
-                price_str = match.group(1).replace(",", "")
-                try:
-                    return int(price_str)
-                except ValueError:
-                    continue
+                parsed = self._parse_price_value(match.group(1))
+                if parsed is not None:
+                    return parsed
 
-        return None
+        return self._parse_price_value(title)
 
     def _generate_product_id(self, url: str) -> str:
         """URL 기반 상품 ID 생성"""

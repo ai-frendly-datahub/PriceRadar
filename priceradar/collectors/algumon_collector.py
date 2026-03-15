@@ -62,6 +62,21 @@ class AlgumonCollector(BaseCollector):
                     break
 
                 soup = BeautifulSoup(html_content, "html.parser")
+                if not self._validate_html_schema(
+                    soup,
+                    {
+                        "post_item": "li.post-li",
+                        "product_link": "li.post-li a[href]",
+                    },
+                    context=page_url,
+                ):
+                    logger.warning(
+                        "schema_invalid_skip_source",
+                        source_id=self.source_id,
+                        url=page_url,
+                    )
+                    break
+
                 product_elements = soup.select("li.post-li")
                 if not product_elements:
                     break
@@ -233,14 +248,7 @@ class AlgumonCollector(BaseCollector):
         return f"{self.source_id}_{hash_obj.hexdigest()[:12]}"
 
     def _parse_price(self, price_text: str | None) -> int | None:
-        if not price_text:
-            return None
-
-        matched = re.search(r"\d{1,3}(?:,\d{3})*|\d+", price_text)
-        if not matched:
-            return None
-
-        return int(matched.group(0).replace(",", ""))
+        return self._parse_price_value(price_text)
 
     def _parse_discount_rate(self, *texts: str | None) -> float | None:
         discount_keywords = ["할인", "off", "세일", "쿠폰", "최대", "인하"]
