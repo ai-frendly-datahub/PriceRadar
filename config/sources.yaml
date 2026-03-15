@@ -116,6 +116,36 @@ sources:
      max_pages: 5
      description: "딜바다 - 다양한 쇼핑몰의 핫딜 정보 통합"
 
+   - id: danawa_browser
+     name: "다나와 가격비교"
+     type: danawa
+     url: "https://prod.danawa.com/list/?cate=112758"
+     enabled: false
+     trust_tier: T2_expert
+     collector_type: C3_browser
+     category: electronics
+     timeout: 22000
+     wait_for: ".main_prodlist li.prod_item"
+     title_selector: ".prod_name a"
+     content_selector: ".main_prodlist"
+     link_selector: ".main_prodlist li.prod_item .prod_name a"
+     description: "Task 7 JS source: Danawa JS-rendered product list"
+
+   - id: ppomppu_browser
+     name: "뽐뿌 핫딜"
+     type: ppomppu
+     url: "https://www.ppomppu.co.kr/zboard/zboard.php?id=ppomppu"
+     enabled: false
+     trust_tier: T2_expert
+     collector_type: C3_browser
+     category: market
+     timeout: 20000
+     wait_for: "#revolution_main_table tbody tr"
+     title_selector: ".baseList-title a"
+     content_selector: "#revolution_main_table"
+     link_selector: "#revolution_main_table tbody tr .baseList-title a"
+     description: "Task 7 JS source: Ppomppu deal board"
+
    # 카테고리별 소스 (필요시 활성화)
    # - id: enuri_electronics
    #   name: "에누리 가전/TV"
@@ -157,4 +187,3 @@ platforms:
   elevenst:
     name: "11번가"
     domain: "11st.co.kr"
-

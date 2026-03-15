@@ -22,6 +22,7 @@ class CollectorRegistry:
         "C3_clien": ("priceradar.collectors.clien_collector", "ClienCollector"),
         "C3_fmkorea": ("priceradar.collectors.fmkorea_collector", "FmkoreaCollector"),
         "C3_dealbada": ("priceradar.collectors.dealbada_collector", "DealbadaCollector"),
+        "C3_browser": ("priceradar.collectors.browser_collector", "BrowserCollector"),
     }
 
     @classmethod

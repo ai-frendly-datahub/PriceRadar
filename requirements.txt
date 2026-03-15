@@ -12,3 +12,4 @@ prophet>=1.1
 structlog>=23.2.0
 pybreaker>=1.0.0
 radar-core>=0.2.0
+playwright>=1.40.0
