@@ -63,9 +63,9 @@ jobs:
         run: |
           python main.py --mode once --report
 
-       - name: Generate index.html
-         run: |
-           python -c "from priceradar.reporter import generate_index_html; from pathlib import Path; generate_index_html(Path('docs/reports'))"
+      - name: Generate index.html
+        run: |
+          python -c "from priceradar.reporter import generate_index_html; from pathlib import Path; generate_index_html(Path('docs/reports'))"
 
       - name: Run Quality Checks
         if: always()
@@ -86,7 +86,7 @@ jobs:
         uses: stefanzweifel/git-auto-commit-action@v5
         with:
           commit_message: "chore: update radar data [skip ci]"
-          file_pattern: data/*.duckdb
+          file_pattern: "data/*.duckdb docs/reports/*_summary.json"
           skip_fetch: false
           skip_checkout: false
 
