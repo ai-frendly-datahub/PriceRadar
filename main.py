@@ -291,6 +291,11 @@ def generate_report(config: dict[str, Any], output_dir: str | None = None) -> No
         title=f"PriceRadar 일일 리포트 - {today}",
     )
 
+    # Generate unified index.html
+    from priceradar.reporter import generate_index_html
+
+    generate_index_html(Path(output_dir))
+
     store.close()
 
     print(f"리포트 생성 완료: {report_path}")
