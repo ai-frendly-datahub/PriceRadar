@@ -21,6 +21,7 @@ def generate_report(
     store=None,
 ) -> Path:
     """Render HTML report using radar-core unified template."""
+    articles_list = list(articles)
     plugin_charts = []
     if store is not None:
         try:
@@ -31,9 +32,28 @@ def generate_report(
                 plugin_charts.append(chart)
         except Exception:
             pass
+
+    # --- Universal plugins (entity heatmap + source reliability) ---
+    try:
+        from radar_core.plugins.entity_heatmap import get_chart_config as _heatmap_config
+
+        _heatmap = _heatmap_config(articles=articles_list)
+        if _heatmap is not None:
+            plugin_charts.append(_heatmap)
+    except Exception:
+        pass
+    try:
+        from radar_core.plugins.source_reliability import get_chart_config as _reliability_config
+
+        _reliability = _reliability_config(store=store)
+        if _reliability is not None:
+            plugin_charts.append(_reliability)
+    except Exception:
+        pass
+
     return _core_generate_report(
         category=category,
-        articles=articles,
+        articles=articles_list,
         output_path=output_path,
         stats=stats,
         errors=errors,
