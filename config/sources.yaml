@@ -120,7 +120,7 @@ sources:
      name: "다나와 가격비교"
      type: danawa
      url: "https://prod.danawa.com/list/?cate=112758"
-     enabled: false
+     enabled: true
      trust_tier: T2_expert
      collector_type: C3_browser
      category: electronics
