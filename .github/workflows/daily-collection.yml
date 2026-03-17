@@ -36,9 +36,9 @@ jobs:
       run: |
         python main.py --mode once --report
 
-     - name: Generate index.html
-       run: |
-         python -c "from priceradar.reporter import generate_index_html; from pathlib import Path; generate_index_html(Path('docs/reports'))"
+    - name: Generate index.html
+      run: |
+        python -c "from priceradar.reporter import generate_index_html; from pathlib import Path; generate_index_html(Path('docs/reports'))"
 
     - name: Run Quality Checks
       if: always()
