@@ -34,11 +34,11 @@ jobs:
 
     - name: Run collection and generate report
       run: |
-        python main.py --mode once --report
+        python main.py --mode once --report --config config/config.yaml --sources config/sources.yaml --notifications config/notifications.yaml
 
     - name: Generate index.html
       run: |
-        python -c "from priceradar.reporter import generate_index_html; from pathlib import Path; generate_index_html(Path('docs/reports'))"
+        python -c "from priceradar.reporter import generate_index_html; from pathlib import Path; generate_index_html(Path('reports'))"
 
     - name: Run Quality Checks
       if: always()
@@ -59,14 +59,14 @@ jobs:
       uses: actions/upload-artifact@v4
       with:
         name: daily-report
-        path: docs/reports/
+        path: reports/
         retention-days: 30
 
     - name: Commit and push if changes
       run: |
         git config --local user.email "action@github.com"
         git config --local user.name "GitHub Action"
-        git add docs/reports/
+        git add reports/
         git add data/priceradar.duckdb
         git diff --quiet && git diff --staged --quiet || (git commit -m "Daily collection: $(date +'%Y-%m-%d')" && git push)
       env:

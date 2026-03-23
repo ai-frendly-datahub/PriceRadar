@@ -61,11 +61,11 @@ jobs:
 
       - name: Run Radar
         run: |
-          python main.py --mode once --report
+          python main.py --mode once --report --config config/config.yaml --sources config/sources.yaml --notifications config/notifications.yaml
 
       - name: Generate index.html
         run: |
-          python -c "from priceradar.reporter import generate_index_html; from pathlib import Path; generate_index_html(Path('docs/reports'))"
+          python -c "from priceradar.reporter import generate_index_html; from pathlib import Path; generate_index_html(Path('reports'))"
 
       - name: Run Quality Checks
         if: always()
@@ -87,7 +87,7 @@ jobs:
         uses: stefanzweifel/git-auto-commit-action@v5
         with:
           commit_message: "chore: update radar data [skip ci]"
-          file_pattern: "data/*.duckdb docs/reports/*_summary.json"
+          file_pattern: "data/*.duckdb reports/*_summary.json"
           skip_fetch: false
           skip_checkout: false
 
@@ -96,7 +96,7 @@ jobs:
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}
           publish_branch: gh-pages
-          publish_dir: ./docs/reports
+          publish_dir: ./reports
           user_name: github-actions[bot]
           user_email: github-actions[bot]@users.noreply.github.com
           commit_message: "docs: update radar report"
@@ -129,7 +129,7 @@ jobs:
           echo "- **Timestamp**: $(date +'%Y-%m-%d %H:%M:%S UTC')" >> $GITHUB_STEP_SUMMARY
           echo "- **Status**: ${{ job.status }}" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
-          if [ -f "docs/reports/index.html" ]; then
+          if [ -f "reports/index.html" ]; then
             echo "✅ Report generated successfully" >> $GITHUB_STEP_SUMMARY
           fi
           if [ -f "data/priceradar.duckdb" ]; then
