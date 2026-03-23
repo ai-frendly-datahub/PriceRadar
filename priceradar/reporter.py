@@ -1,14 +1,22 @@
 from __future__ import annotations
 
+import importlib
 from collections.abc import Iterable
 from pathlib import Path
-
-from radar_core.report_utils import (
-    generate_index_html as _core_generate_index_html,
-    generate_report as _core_generate_report,
-)
+from typing import Callable, cast
 
 from .models import Article, CategoryConfig
+
+
+def _load_core_report_utils() -> tuple[Callable[..., Path], Callable[..., Path]]:
+    report_utils = importlib.import_module("radar_core.report_utils")
+    generate_index_html = getattr(report_utils, "generate_index_html")
+    generate_report = getattr(report_utils, "generate_report")
+    if not callable(generate_index_html) or not callable(generate_report):
+        raise TypeError("radar_core.report_utils is missing required callables")
+    return cast(Callable[..., Path], generate_index_html), cast(
+        Callable[..., Path], generate_report
+    )
 
 
 def generate_report(
@@ -20,22 +28,17 @@ def generate_report(
     errors: list[str] | None = None,
     store=None,
 ) -> Path:
-    """Render HTML report using radar-core unified template."""
+    """Generate HTML report (delegates to radar-core)."""
+    _, core_generate_report = _load_core_report_utils()
     articles_list = list(articles)
     plugin_charts = []
-    if store is not None:
-        try:
-            from priceradar.plugins.price_forecast import get_chart_config
-
-            chart = get_chart_config(store=store)
-            if chart is not None:
-                plugin_charts.append(chart)
-        except Exception:
-            pass
 
     # --- Universal plugins (entity heatmap + source reliability) ---
     try:
-        from radar_core.plugins.entity_heatmap import get_chart_config as _heatmap_config
+        _heatmap_module = importlib.import_module("radar_core.plugins.entity_heatmap")
+        _heatmap_config = getattr(_heatmap_module, "get_chart_config")
+        if not callable(_heatmap_config):
+            raise TypeError("entity_heatmap.get_chart_config is not callable")
 
         _heatmap = _heatmap_config(articles=articles_list)
         if _heatmap is not None:
@@ -43,7 +46,10 @@ def generate_report(
     except Exception:
         pass
     try:
-        from radar_core.plugins.source_reliability import get_chart_config as _reliability_config
+        _reliability_module = importlib.import_module("radar_core.plugins.source_reliability")
+        _reliability_config = getattr(_reliability_module, "get_chart_config")
+        if not callable(_reliability_config):
+            raise TypeError("source_reliability.get_chart_config is not callable")
 
         _reliability = _reliability_config(store=store)
         if _reliability is not None:
@@ -51,7 +57,7 @@ def generate_report(
     except Exception:
         pass
 
-    return _core_generate_report(
+    return core_generate_report(
         category=category,
         articles=articles_list,
         output_path=output_path,
@@ -62,5 +68,7 @@ def generate_report(
 
 
 def generate_index_html(report_dir: Path, summaries_dir: Path | None = None) -> Path:
-    """Generate index.html using radar-core unified template."""
-    return _core_generate_index_html(report_dir, "Price Radar")
+    """Generate index.html (delegates to radar-core)."""
+    core_generate_index_html, _core_generate_report = _load_core_report_utils()
+    radar_name = "Price Radar"
+    return core_generate_index_html(report_dir, radar_name)

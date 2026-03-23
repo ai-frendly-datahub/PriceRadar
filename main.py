@@ -12,7 +12,6 @@ from __future__ import annotations
 import argparse
 import os
 import time
-from dataclasses import asdict
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
@@ -24,9 +23,10 @@ from priceradar.collectors.base import RawItem
 from priceradar.collectors.registry import CollectorRegistry
 from priceradar.config import load_notification_config
 from priceradar.graph.graph_store import GraphStore
-from priceradar.notifier import Notifier, PipelineNotifier, detect_price_notifications
+from priceradar.models import Article, CategoryConfig
+from priceradar.notifier import PipelineNotifier, detect_price_notifications
 from priceradar.raw_logger import RawLogger
-from priceradar.reporters.html_reporter import HtmlReporter
+from priceradar.reporter import generate_index_html, generate_report as generate_core_report
 from priceradar.search_index import SearchIndex
 from priceradar.validators import validate_article
 
@@ -46,7 +46,7 @@ def load_sources(sources_path: str = "config/sources.yaml") -> dict[str, Any]:
 def run_collection(
     config: dict[str, Any],
     sources_config: dict[str, Any],
-    notifier: Notifier | None = None,
+    notifier: PipelineNotifier | None = None,
 ) -> None:
     """데이터 수집 실행"""
     print("\n=== 데이터 수집 시작 ===")
@@ -110,7 +110,7 @@ def run_collection(
                     )
 
             raw_logger.log(
-                (_raw_item_to_record(item) for item in validated_items), source_name=source_id
+                (_raw_item_to_article(item) for item in validated_items), source_name=source_id
             )
 
             # 중복 제거 후 저장
@@ -141,12 +141,17 @@ def run_collection(
     print(f"중복 제거: {duplicates_removed}개 (저장: {total_items_saved}개)")
 
 
-def _raw_item_to_record(item: RawItem) -> dict[str, Any]:
-    record = asdict(item)
-    collected_at = record.get("collected_at")
-    if isinstance(collected_at, datetime):
-        record["collected_at"] = collected_at.isoformat()
-    return record
+def _raw_item_to_article(item: RawItem) -> Article:
+    return Article(
+        title=item.title,
+        link=item.url,
+        summary=f"Price item from {item.source}",
+        published=item.collected_at,
+        source=item.source,
+        category=item.category or "price",
+        matched_entities={},
+        collected_at=item.collected_at,
+    )
 
 
 def _build_search_body(platform: str | None, category: str | None, brand: str | None) -> str:
@@ -276,24 +281,57 @@ def generate_report(config: dict[str, Any], output_dir: str | None = None) -> No
 
     # 리포트 생성
     if output_dir is None:
-        output_dir = str(config.get("reporting", {}).get("output_path", "docs/reports"))
+        output_dir = str(config.get("reporting", {}).get("output_path", "reports"))
 
-    today = datetime.now(tz=UTC).strftime("%Y-%m-%d")
-    report_dir = os.path.join(output_dir, today)
-    os.makedirs(report_dir, exist_ok=True)
+    os.makedirs(output_dir, exist_ok=True)
+    report_date = datetime.now(tz=UTC).strftime("%Y%m%d")
+    report_path = os.path.join(output_dir, f"price_{report_date}.html")
 
-    report_path = os.path.join(report_dir, "index.html")
+    articles: list[Article] = []
+    for deal in deals:
+        collected_at = deal.get("collected_at")
+        published_at = collected_at if isinstance(collected_at, datetime) else None
+        score = deal.get("radar_score")
+        if isinstance(score, float | int):
+            summary = f"Radar score {float(score):.2f}"
+        else:
+            summary = "Radar score unavailable"
 
-    reporter = HtmlReporter()
-    reporter.generate_report(
-        deals=deals,
-        output_path=report_path,
-        title=f"PriceRadar 일일 리포트 - {today}",
+        articles.append(
+            Article(
+                title=str(deal.get("title") or "Untitled deal"),
+                link=str(deal.get("url") or ""),
+                summary=str(deal.get("explanation") or summary),
+                published=published_at,
+                source=str(deal.get("platform") or deal.get("source") or "unknown"),
+                category=str(deal.get("category") or "price"),
+                matched_entities={},
+                collected_at=published_at,
+            )
+        )
+
+    category_config = CategoryConfig(
+        category_name="price",
+        display_name="Price Radar",
+        sources=[],
+        entities=[],
+    )
+    stats = {
+        "sources": len({article.source for article in articles if article.source}),
+        "collected": len(articles),
+        "matched": 0,
+        "window_days": 1,
+    }
+    generate_core_report(
+        category=category_config,
+        articles=articles,
+        output_path=Path(report_path),
+        stats=stats,
+        errors=None,
+        store=store,
     )
 
     # Generate unified index.html
-    from priceradar.reporter import generate_index_html
-
     generate_index_html(Path(output_dir))
 
     store.close()
@@ -305,7 +343,7 @@ def run_once(
     config: dict[str, Any],
     sources_config: dict[str, Any],
     generate_report_flag: bool = False,
-    notifier: Notifier | None = None,
+    notifier: PipelineNotifier | None = None,
 ) -> None:
     """1회 실행"""
     print("\n" + "=" * 60)
@@ -345,7 +383,7 @@ def run_scheduler(
     config: dict[str, Any],
     sources_config: dict[str, Any],
     interval_hours: int = 24,
-    notifier: Notifier | None = None,
+    notifier: PipelineNotifier | None = None,
 ) -> None:
     """주기적 실행"""
     print(f"스케줄러 시작 ({interval_hours}시간 간격)")

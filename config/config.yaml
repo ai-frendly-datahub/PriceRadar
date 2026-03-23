@@ -47,4 +47,4 @@ thresholds:
 reporting:
   max_items_per_category: 20
   max_items_per_report: 100
-  output_path: "docs/reports"
+  output_path: "reports"
