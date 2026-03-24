@@ -34,7 +34,7 @@ jobs:
 
     - name: Run collection and generate report
       run: |
-        python main.py --mode once --report --config config/config.yaml --sources config/sources.yaml --notifications config/notifications.yaml
+        python main.py --mode once --report --config config/config.yaml --sources config/sources.yaml --notifications config/notifications.yaml --snapshot-db
 
     - name: Generate index.html
       run: |
