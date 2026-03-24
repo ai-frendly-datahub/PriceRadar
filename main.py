@@ -18,6 +18,7 @@ from typing import Any
 
 import yaml
 
+from date_storage import apply_date_storage_policy
 from priceradar.analyzers.price_scorer import PriceScorer
 from priceradar.collectors.base import RawItem
 from priceradar.collectors.registry import CollectorRegistry
@@ -26,7 +27,8 @@ from priceradar.graph.graph_store import GraphStore
 from priceradar.models import Article, CategoryConfig
 from priceradar.notifier import PipelineNotifier, detect_price_notifications
 from priceradar.raw_logger import RawLogger
-from priceradar.reporter import generate_index_html, generate_report as generate_core_report
+from priceradar.reporter import generate_index_html
+from priceradar.reporter import generate_report as generate_core_report
 from priceradar.search_index import SearchIndex
 from priceradar.validators import validate_article
 
@@ -344,6 +346,7 @@ def run_once(
     sources_config: dict[str, Any],
     generate_report_flag: bool = False,
     notifier: PipelineNotifier | None = None,
+    snapshot_db: bool = False,
 ) -> None:
     """1회 실행"""
     print("\n" + "=" * 60)
@@ -360,7 +363,25 @@ def run_once(
     if generate_report_flag:
         generate_report(config)
 
-    # 4. 통계 출력
+    # 4. Apply date storage policy
+    if snapshot_db:
+        try:
+            db_path = config["database"]["path"]
+            date_storage = apply_date_storage_policy(
+                database_path=Path(db_path),
+                raw_data_dir=Path("data") / "raw",
+                report_dir=Path("reports"),
+                keep_raw_days=180,
+                keep_report_days=90,
+                snapshot_db=snapshot_db,
+            )
+            snapshot_path = date_storage.get("snapshot_path")
+            if isinstance(snapshot_path, str) and snapshot_path:
+                print(f"Snapshot saved to {snapshot_path}")
+        except Exception as e:
+            print(f"Snapshot creation failed: {e}")
+
+    # 5. 통계 출력
     db_path = config["database"]["path"]
     store = GraphStore(db_path)
     stats = store.get_stats()
@@ -384,12 +405,19 @@ def run_scheduler(
     sources_config: dict[str, Any],
     interval_hours: int = 24,
     notifier: PipelineNotifier | None = None,
+    snapshot_db: bool = False,
 ) -> None:
     """주기적 실행"""
     print(f"스케줄러 시작 ({interval_hours}시간 간격)")
 
     while True:
-        run_once(config, sources_config, generate_report_flag=True, notifier=notifier)
+        run_once(
+            config,
+            sources_config,
+            generate_report_flag=True,
+            notifier=notifier,
+            snapshot_db=snapshot_db,
+        )
 
         print(f"\n다음 실행까지 {interval_hours}시간 대기 중...")
         time.sleep(interval_hours * 3600)
@@ -430,6 +458,9 @@ def main() -> None:
         default="config/notifications.yaml",
         help="알림 설정 파일 경로",
     )
+    parser.add_argument(
+        "--snapshot-db", action="store_true", default=False, help="Create database snapshot"
+    )
 
     args = parser.parse_args()
 
@@ -441,9 +472,21 @@ def main() -> None:
 
     # 모드별 실행
     if args.mode == "once":
-        run_once(config, sources_config, generate_report_flag=args.report, notifier=notifier)
+        run_once(
+            config,
+            sources_config,
+            generate_report_flag=args.report,
+            notifier=notifier,
+            snapshot_db=args.snapshot_db,
+        )
     elif args.mode == "scheduler":
-        run_scheduler(config, sources_config, interval_hours=args.interval, notifier=notifier)
+        run_scheduler(
+            config,
+            sources_config,
+            interval_hours=args.interval,
+            notifier=notifier,
+            snapshot_db=args.snapshot_db,
+        )
 
 
 if __name__ == "__main__":

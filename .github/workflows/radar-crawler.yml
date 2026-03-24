@@ -59,9 +59,9 @@ jobs:
           python -m playwright install chromium
           python -m playwright install-deps chromium
 
-      - name: Run Radar
-        run: |
-          python main.py --mode once --report --config config/config.yaml --sources config/sources.yaml --notifications config/notifications.yaml
+       - name: Run Radar
+         run: |
+           python main.py --mode once --report --config config/config.yaml --sources config/sources.yaml --notifications config/notifications.yaml --snapshot-db
 
       - name: Generate index.html
         run: |
@@ -82,14 +82,14 @@ jobs:
           path: quality_report.txt
           retention-days: 30
 
-      - name: Auto-commit data updates
-        continue-on-error: true
-        uses: stefanzweifel/git-auto-commit-action@v5
-        with:
-          commit_message: "chore: update radar data [skip ci]"
-          file_pattern: "data/*.duckdb reports/*_summary.json"
-          skip_fetch: false
-          skip_checkout: false
+       - name: Auto-commit data updates
+         continue-on-error: true
+         uses: stefanzweifel/git-auto-commit-action@v5
+         with:
+           commit_message: "chore: update radar data [skip ci]"
+           file_pattern: "data/*.duckdb data/snapshots/**/*.duckdb reports/*_summary.json"
+           skip_fetch: false
+           skip_checkout: false
 
       - name: Deploy to GitHub Pages
         uses: peaceiris/actions-gh-pages@v3
