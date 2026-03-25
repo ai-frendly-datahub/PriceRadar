@@ -4,11 +4,12 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any
 
+
 if TYPE_CHECKING:
     from priceradar.graph.graph_store import GraphStore
 
 
-def get_chart_config(store: "GraphStore | None" = None, articles: Any = None) -> dict | None:
+def get_chart_config(store: GraphStore | None = None, articles: Any = None) -> dict | None:
     """Generate Plotly price forecast chart config for plugin slot.
 
     Args:
@@ -26,7 +27,6 @@ def get_chart_config(store: "GraphStore | None" = None, articles: Any = None) ->
         if not deals:
             return None
 
-        from priceradar.forecasting.price_forecast import forecast_category_prices
         from priceradar.reporters.html_reporter import HtmlReporter
 
         reporter = HtmlReporter.__new__(HtmlReporter)

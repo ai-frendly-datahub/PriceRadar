@@ -1,9 +1,10 @@
 from __future__ import annotations
 
 import importlib
-import structlog
 from datetime import UTC, datetime
 from typing import Any
+
+import structlog
 
 from priceradar.collectors.base import BaseCollector, RawItem
 
@@ -36,7 +37,7 @@ class BrowserCollector(BaseCollector):
 
         try:
             browser_module = importlib.import_module("radar_core.browser_collector")
-            collect_browser_sources = getattr(browser_module, "collect_browser_sources")
+            collect_browser_sources = browser_module.collect_browser_sources
         except ImportError:
             logger.warning("playwright_unavailable", source_id=self.source_id)
             return []

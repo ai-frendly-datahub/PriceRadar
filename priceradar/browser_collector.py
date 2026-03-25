@@ -18,11 +18,12 @@ pipeline.  This module provides the *standard-tier interface* used by
 
 from __future__ import annotations
 
-from typing import Any, TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 import structlog
 
 from .models import Article
+
 
 if TYPE_CHECKING:
     from .models import Source

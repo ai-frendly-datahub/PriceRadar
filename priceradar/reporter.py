@@ -1,17 +1,17 @@
 from __future__ import annotations
 
 import importlib
-from collections.abc import Iterable
+from collections.abc import Callable, Iterable
 from pathlib import Path
-from typing import Callable, cast
+from typing import cast
 
 from .models import Article, CategoryConfig
 
 
 def _load_core_report_utils() -> tuple[Callable[..., Path], Callable[..., Path]]:
     report_utils = importlib.import_module("radar_core.report_utils")
-    generate_index_html = getattr(report_utils, "generate_index_html")
-    generate_report = getattr(report_utils, "generate_report")
+    generate_index_html = report_utils.generate_index_html
+    generate_report = report_utils.generate_report
     if not callable(generate_index_html) or not callable(generate_report):
         raise TypeError("radar_core.report_utils is missing required callables")
     return cast(Callable[..., Path], generate_index_html), cast(
@@ -36,7 +36,7 @@ def generate_report(
     # --- Universal plugins (entity heatmap + source reliability) ---
     try:
         _heatmap_module = importlib.import_module("radar_core.plugins.entity_heatmap")
-        _heatmap_config = getattr(_heatmap_module, "get_chart_config")
+        _heatmap_config = _heatmap_module.get_chart_config
         if not callable(_heatmap_config):
             raise TypeError("entity_heatmap.get_chart_config is not callable")
 
@@ -47,7 +47,7 @@ def generate_report(
         pass
     try:
         _reliability_module = importlib.import_module("radar_core.plugins.source_reliability")
-        _reliability_config = getattr(_reliability_module, "get_chart_config")
+        _reliability_config = _reliability_module.get_chart_config
         if not callable(_reliability_config):
             raise TypeError("source_reliability.get_chart_config is not callable")
 
