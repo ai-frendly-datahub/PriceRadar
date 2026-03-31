@@ -1,6 +1,111 @@
 category_name: "price"
 display_name: "가격비교 레이더"
 
+sources:
+  # === 국내 쇼핑/가격비교 뉴스 ===
+  - name: "아웃스탠딩"
+    type: "rss"
+    url: "https://outstanding.kr/feed/"
+
+  - name: "이코노미스트 유통"
+    type: "rss"
+    url: "https://economist.co.kr/rss/retail.xml"
+
+  - name: "한경 유통"
+    type: "rss"
+    url: "https://www.hankyung.com/feed/distribution"
+
+  - name: "조선비즈 유통"
+    type: "rss"
+    url: "https://biz.chosun.com/rss/distribution.xml"
+
+  - name: "매일경제 유통"
+    type: "rss"
+    url: "https://www.mk.co.kr/rss/30200046/"
+
+  # === 할인/딜 정보 ===
+  - name: "뽐뿌 핫딜"
+    type: "javascript"
+    url: "https://www.ppomppu.co.kr/zboard/zboard.php?id=ppomppu"
+    config:
+      wait_for: ".list_vspace"
+
+  - name: "클리앙 알뜰구매"
+    type: "javascript"
+    url: "https://www.clien.net/service/board/jirum"
+    config:
+      wait_for: ".list_content"
+
+  - name: "루리웹 핫딜"
+    type: "javascript"
+    url: "https://bbs.ruliweb.com/market/board/1020"
+    config:
+      wait_for: ".board_list"
+
+  # === Reddit 쇼핑/딜 커뮤니티 ===
+  - name: "r/deals"
+    type: "rss"
+    url: "https://www.reddit.com/r/deals/.rss"
+
+  - name: "r/frugal"
+    type: "rss"
+    url: "https://www.reddit.com/r/Frugal/.rss"
+
+  - name: "r/buildapcsales"
+    type: "rss"
+    url: "https://www.reddit.com/r/buildapcsales/.rss"
+
+  - name: "r/GameDeals"
+    type: "rss"
+    url: "https://www.reddit.com/r/GameDeals/.rss"
+
+  - name: "r/korea"
+    type: "rss"
+    url: "https://www.reddit.com/r/korea/.rss"
+
+  - name: "r/Costco"
+    type: "rss"
+    url: "https://www.reddit.com/r/Costco/.rss"
+
+  # === 글로벌 가격/유통 뉴스 ===
+  - name: "Retail Dive"
+    type: "rss"
+    url: "https://www.retaildive.com/feeds/news/"
+
+  - name: "Retail Week"
+    type: "rss"
+    url: "https://www.retail-week.com/rss"
+
+  - name: "Chain Store Age"
+    type: "rss"
+    url: "https://chainstoreage.com/feed"
+
+  - name: "Grocery Dive"
+    type: "rss"
+    url: "https://www.grocerydive.com/feeds/news/"
+
+  # === 가격 추적/분석 ===
+  - name: "CamelCamelCamel Blog"
+    type: "rss"
+    url: "https://camelcamelcamel.com/blog/feed/"
+
+  - name: "Slickdeals Blog"
+    type: "rss"
+    url: "https://slickdeals.net/blog/feed/"
+
+  # === 이커머스 트렌드 ===
+  - name: "eMarketer"
+    type: "rss"
+    url: "https://www.insiderintelligence.com/rss/feed"
+
+  - name: "Digital Commerce 360"
+    type: "rss"
+    url: "https://www.digitalcommerce360.com/feed/"
+
+  - name: "Modern Retail"
+    type: "rss"
+    url: "https://www.modernretail.co/feed/"
+
 entities:
   - name: "Brand"
     display_name: "브랜드"
