@@ -1,0 +1,15 @@
+{
+  "date": "2026-04-15",
+  "category": "price",
+  "article_count": 100,
+  "source_count": 4,
+  "matched_count": 0,
+  "top_entities": [],
+  "sources": {
+    "coupang": 30,
+    "unknown": 41,
+    "elevenst": 12,
+    "gmarket": 17
+  },
+  "generated_at": "2026-04-15T11:38:37.452106+09:00"
+}
