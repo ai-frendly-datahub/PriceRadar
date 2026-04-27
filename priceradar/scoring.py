@@ -18,7 +18,7 @@ def compute_radar_score(
     *,
     is_new_low: bool,
     popularity_hint: float = 0.0,
-    volatility_hint: float | None = None,
+    volatility_hint: float | str | None = None,
     config: ScoreConfig | None = None,
 ) -> PriceEvent:
     cfg = config or ScoreConfig()
@@ -26,7 +26,7 @@ def compute_radar_score(
     discount_strength = _clamp01(snapshot.discount_rate_vs_avg or 0.0)
     timing_rarity = 1.0 if is_new_low else 0.5
     popularity = _clamp01(popularity_hint)
-    volatility = _clamp01(volatility_hint) if volatility_hint is not None else 0.0
+    volatility = _normalize_volatility(volatility_hint)
     stability = 1 - volatility
 
     radar_score = (
@@ -87,4 +87,16 @@ def _build_explanation(
 
 
 def _clamp01(value: float) -> float:
-    return max(0.0, min(1.0, value))
+    try:
+        numeric = float(value)
+    except (TypeError, ValueError):
+        return 0.0
+    return max(0.0, min(1.0, numeric))
+
+
+def _normalize_volatility(value: float | str | None) -> float:
+    if value is None:
+        return 0.0
+    if isinstance(value, str):
+        return {"low": 0.2, "medium": 0.5, "mid": 0.5, "high": 0.8}.get(value.lower(), 0.0)
+    return _clamp01(value)

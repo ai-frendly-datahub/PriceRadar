@@ -1,6 +1,173 @@
 # PriceRadar 데이터 소스 설정
 # 다양한 가격 추적/비교 서비스 통합
 
+data_quality:
+  priority: P1
+  primary_motion: conversion
+  weakest_dimension: authority
+  required_components:
+    canonical_key_fields:
+      - source_id
+      - platform
+      - product_id
+      - option_signature
+    effective_price_fields:
+      - list_price
+      - discount_price
+      - coupon_value
+      - card_benefit
+      - shipping_fee
+      - effective_price
+    event_models:
+      - sku_price_snapshot
+      - purchase_benefit_snapshot
+      - stock_status_transition
+  quality_outputs:
+    latest: reports/price_quality.json
+    dated_pattern: reports/price_YYYYMMDD_quality.json
+    tracked_event_models:
+      - sku_price_snapshot
+      - purchase_benefit_snapshot
+      - stock_status_transition
+  event_models:
+    sku_price_snapshot:
+      date_fields:
+        - observed_at
+        - collected_at
+      required_fields:
+        - platform
+        - product_id
+        - option_signature
+        - effective_price
+    purchase_benefit_snapshot:
+      date_fields:
+        - observed_at
+        - collected_at
+      required_fields:
+        - platform
+        - product_id
+        - coupon_value
+        - card_benefit
+    stock_status_transition:
+      date_fields:
+        - observed_at
+        - collected_at
+      required_fields:
+        - platform
+        - product_id
+        - stock_status
+  canonical_keys:
+    sku:
+      - source_id
+      - platform
+      - product_id
+      - option_signature
+    price_snapshot:
+      - source_id
+      - product_id
+      - option_signature
+      - observed_at
+  freshness_sla:
+    sku_price_snapshot_hours: 24
+    purchase_benefit_snapshot_hours: 24
+    stock_status_transition_hours: 12
+  quality_gates:
+    - 상품명, 옵션, 용량을 canonical SKU key로 정규화
+    - 표시가, 할인가, 실구매가, 배송비를 별도 필드로 유지
+    - 급격한 가격 변동은 outlier flag와 원문 URL을 함께 기록
+    - 공식 브랜드/스토어 후보는 ToS와 파싱 안정성 검증 후 활성화
+  next_actions:
+    - 공식 브랜드/스토어 source 후보를 검증해 authority 공백을 보완
+    - SKU 가격 이력, 재고, 쿠폰/카드혜택을 같은 이벤트 모델로 정렬
+    - 가격 outlier와 품절 전환 리포트를 검증 산출물에 포함
+  source_contracts:
+    default:
+      canonical_key_fields:
+        - source_id
+        - platform
+        - product_id
+        - url
+        - option_signature
+      effective_price_fields:
+        - list_price
+        - discount_price
+        - coupon_value
+        - card_benefit
+        - shipping_fee
+        - effective_price
+      stock_fields:
+        - stock_status
+        - sold_out_at
+        - restocked_at
+      event_models:
+        - sku_price_snapshot
+        - purchase_benefit_snapshot
+        - stock_status_transition
+      verification_role: market_price_reference
+    overrides:
+      fallcent_main:
+        verification_role: price_history_reference
+      enuri_main:
+        verification_role: price_compare_reference
+      danawa_browser:
+        verification_role: price_compare_reference
+      algumon_main:
+        event_models:
+          - deal_listing
+          - purchase_benefit_snapshot
+        verification_role: community_deal_reference
+      ruliweb_market:
+        event_models:
+          - deal_listing
+          - resale_signal
+        verification_role: community_deal_reference
+      quasarzone_saleinfo:
+        event_models:
+          - deal_listing
+          - purchase_benefit_snapshot
+        verification_role: expert_deal_reference
+      clien_albulgumai:
+        event_models:
+          - deal_listing
+          - purchase_benefit_snapshot
+        verification_role: community_deal_reference
+      fmkorea_hotdeal:
+        event_models:
+          - deal_listing
+          - purchase_benefit_snapshot
+        verification_role: community_deal_reference
+      dealbada_main:
+        event_models:
+          - deal_listing
+          - purchase_benefit_snapshot
+        verification_role: community_deal_reference
+  official_source_backlog:
+    - id: coupang_brand_store_candidates
+      name: Coupang brand/store official pages
+      candidate_platform: coupang
+      signal_type: official_store
+      representative_domains:
+        - coupang.com
+        - store.coupang.com
+      activation_gate: ToS review, selector stability, stock status fidelity
+    - id: naver_brand_store_candidates
+      name: Naver Brand Store official pages
+      candidate_platform: naver
+      signal_type: official_store
+      representative_domains:
+        - brand.naver.com
+        - shopping.naver.com/brandstore
+      activation_gate: API/browser policy review, option canonicalization
+    - id: manufacturer_store_candidates
+      name: Manufacturer direct stores
+      candidate_platform: manufacturer
+      signal_type: manufacturer_direct
+      representative_domains:
+        - samsung.com
+        - lg.com
+        - apple.com
+      activation_gate: canonical brand mapping and shipping fee extraction
+
 sources:
   # ===== 폴센트 (Fallcent) - 쿠팡 전문 가격 추적 =====
    - id: fallcent_main

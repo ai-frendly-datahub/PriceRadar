@@ -10,6 +10,25 @@ from .scoring import compute_radar_score
 from .storage import PriceStorage
 
 
+_CONTRACT_META_FIELDS = (
+    "discount_price",
+    "coupon_value",
+    "card_benefit",
+    "shipping_fee",
+    "effective_price",
+    "stock_status",
+    "option_signature",
+    "outlier_flag",
+)
+_NUMERIC_CONTRACT_META_FIELDS = {
+    "discount_price",
+    "coupon_value",
+    "card_benefit",
+    "shipping_fee",
+    "effective_price",
+}
+
+
 def run_pipeline(
     raw_snapshots: list[dict[str, Any]], *, db_path, limit: int | None = None
 ) -> tuple[int, int, int]:
@@ -65,24 +84,83 @@ def _normalize_snapshot(item: dict[str, Any]) -> tuple[PriceSnapshot, Product]:
     discount_vs_avg = item.get("discount_rate_vs_avg")
     if discount_vs_avg is None and item.get("avg_price_30d"):
         avg = float(item["avg_price_30d"])
-        price = float(item.get("price", 0))
+        price = float(_snapshot_price(item))
         discount_vs_avg = (avg - price) / avg if avg > 0 else None
 
     snapshot = PriceSnapshot(
         product_id=product_id,
         ts=ts,
-        price=int(item.get("price", 0)),
+        price=_snapshot_price(item),
         avg_price_30d=_safe_int(item.get("avg_price_30d")),
         avg_price_90d=_safe_int(item.get("avg_price_90d")),
         discount_rate_vs_avg=discount_vs_avg,
         discount_rate_vs_list=item.get("discount_rate_vs_list"),
         source=item.get("source", "fallcent"),
-        meta={
-            "list_type": item.get("list_type"),
-            "is_hotdeal_listed": item.get("is_hotdeal_listed"),
-        },
+        meta=_snapshot_meta(item),
     )
     return snapshot, product
+
+
+def _snapshot_price(item: dict[str, Any]) -> int:
+    raw_price = item.get("price")
+    if raw_price is None:
+        raw_price = item.get("current_price")
+    return _safe_int(raw_price) or 0
+
+
+def _snapshot_meta(item: dict[str, Any]) -> dict[str, object]:
+    meta: dict[str, object] = {
+        "list_type": item.get("list_type"),
+        "is_hotdeal_listed": item.get("is_hotdeal_listed"),
+    }
+    for field in _CONTRACT_META_FIELDS:
+        value = _contract_value(item, field)
+        if field == "discount_price" and value is None:
+            value = item.get("current_price")
+            if value is None:
+                value = item.get("price")
+        if field == "effective_price" and value is None:
+            value = _derived_effective_price(item)
+        meta[field] = _normalize_contract_value(field, value)
+    return meta
+
+
+def _contract_value(item: dict[str, Any], field: str) -> Any:
+    value = item.get(field)
+    if value is not None:
+        return value
+
+    raw_data = item.get("raw_data")
+    if isinstance(raw_data, dict):
+        return raw_data.get(field)
+    return None
+
+
+def _derived_effective_price(item: dict[str, Any]) -> int | None:
+    discount_price = _safe_int(_contract_value(item, "discount_price"))
+    if discount_price is None:
+        discount_price = _safe_int(item.get("current_price"))
+    if discount_price is None:
+        discount_price = _safe_int(item.get("price"))
+    if discount_price is None:
+        return None
+
+    coupon_value = _safe_int(_contract_value(item, "coupon_value")) or 0
+    card_benefit = _safe_int(_contract_value(item, "card_benefit")) or 0
+    shipping_fee = _safe_int(_contract_value(item, "shipping_fee")) or 0
+    return max(0, discount_price - coupon_value - card_benefit + shipping_fee)
+
+
+def _normalize_contract_value(field: str, value: Any) -> object:
+    if field in _NUMERIC_CONTRACT_META_FIELDS:
+        return _safe_int(value)
+    if field == "outlier_flag":
+        if value is None:
+            return None
+        if isinstance(value, str):
+            return value.strip().lower() in {"1", "true", "yes", "y"}
+        return bool(value)
+    return value
 
 
 def _safe_int(value: Any) -> int | None:

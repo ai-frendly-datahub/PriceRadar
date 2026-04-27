@@ -239,10 +239,10 @@ def run_all_checks(
     table_name: str,
     null_conditions: dict[str, str],
     text_columns: list[str] | None = None,
-    language_column: str = "language",
+    language_column: str | None = "language",
     allowed_languages: set[str] | None = None,
-    url_column: str = "url",
-    date_column: str = "published_at",
+    url_column: str | None = "url",
+    date_column: str | None = "published_at",
 ) -> None:
     total = _to_int(
         _fetchone_required(con, f"SELECT COUNT(*) FROM {_quote_identifier(table_name)}")[0]
@@ -250,12 +250,15 @@ def run_all_checks(
     logger.info("total_records", total=total)
 
     check_missing_fields(con, table_name=table_name, null_conditions=null_conditions)
-    check_duplicate_urls(con, table_name=table_name, url_column=url_column)
+    if url_column is not None:
+        check_duplicate_urls(con, table_name=table_name, url_column=url_column)
     check_text_lengths(con, table_name=table_name, text_columns=text_columns or [])
-    check_language_values(
-        con,
-        table_name=table_name,
-        language_column=language_column,
-        allowed_languages=allowed_languages,
-    )
-    check_dates(con, table_name=table_name, date_column=date_column)
+    if language_column is not None:
+        check_language_values(
+            con,
+            table_name=table_name,
+            language_column=language_column,
+            allowed_languages=allowed_languages,
+        )
+    if date_column is not None:
+        check_dates(con, table_name=table_name, date_column=date_column)

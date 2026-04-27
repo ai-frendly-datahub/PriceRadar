@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import argparse
 import os
+import re
 import time
 from datetime import UTC, datetime
 from pathlib import Path
@@ -18,19 +19,38 @@ from typing import Any
 
 import yaml
 
-from date_storage import apply_date_storage_policy
 from priceradar.analyzers.price_scorer import PriceScorer
 from priceradar.collectors.base import RawItem
 from priceradar.collectors.registry import CollectorRegistry
 from priceradar.config import load_notification_config
+from priceradar.date_storage import apply_date_storage_policy
 from priceradar.graph.graph_store import GraphStore
 from priceradar.models import Article, CategoryConfig
 from priceradar.notifier import PipelineNotifier, detect_price_notifications
+from priceradar.quality_report import build_quality_report, write_quality_report
 from priceradar.raw_logger import RawLogger
 from priceradar.reporter import generate_index_html
 from priceradar.reporter import generate_report as generate_core_report
 from priceradar.search_index import SearchIndex
 from priceradar.validators import validate_article
+
+
+_PRICE_CATEGORY_SKIP = {"all", "기타", "misc", "unknown", "price"}
+_PRICE_BRAND_STOPWORDS = {
+    "국산",
+    "더",
+    "사은품",
+    "산지",
+    "신상",
+    "오늘",
+    "완숙",
+    "정품",
+    "추가",
+    "최대",
+    "최저가",
+    "특가",
+    "할인",
+}
 
 
 def load_config(config_path: str = "config/config.yaml") -> dict[str, Any]:
@@ -160,6 +180,107 @@ def _build_search_body(platform: str | None, category: str | None, brand: str | 
     return " ".join(part for part in [platform, category, brand] if part)
 
 
+def _clean_entity_value(value: Any) -> str | None:
+    if value is None:
+        return None
+    text = str(value).strip()
+    if not text:
+        return None
+    if text.lower() in {"none", "null", "n/a", "unknown"}:
+        return None
+    return text
+
+
+def _add_entity(matches: dict[str, list[str]], namespace: str, value: str) -> None:
+    matches[f"{namespace}:{value}"] = [value]
+
+
+def _deal_source(deal: dict[str, Any]) -> str:
+    return (
+        _clean_entity_value(deal.get("source"))
+        or _clean_entity_value(deal.get("platform"))
+        or "unknown"
+    )
+
+
+def _extract_brand_candidate(title: Any, explicit_brand: Any = None) -> str | None:
+    explicit = _clean_entity_value(explicit_brand)
+    if explicit:
+        return explicit
+
+    raw_title = _clean_entity_value(title)
+    if raw_title is None:
+        return None
+
+    title_without_prefix = re.sub(r"^\([^)]*\)\s*", "", raw_title)
+    title_without_prefix = re.sub(r"^\[[^\]]*\]\s*", "", title_without_prefix)
+    candidate = re.split(r"[\s,\[\](/]+", title_without_prefix, maxsplit=1)[0]
+    candidate = candidate.strip("·-_:;~!\"'")
+    if len(candidate) < 2:
+        return None
+    if candidate.lower() in _PRICE_BRAND_STOPWORDS:
+        return None
+    if candidate.isdigit():
+        return None
+    return candidate
+
+
+def _discount_bucket(discount_rate: Any) -> str | None:
+    if not isinstance(discount_rate, (int, float)):
+        return None
+    if discount_rate >= 0.7:
+        return "70%+"
+    if discount_rate >= 0.5:
+        return "50%+"
+    if discount_rate >= 0.3:
+        return "30%+"
+    if discount_rate > 0:
+        return "discounted"
+    return None
+
+
+def _price_band(price: Any) -> str | None:
+    if not isinstance(price, (int, float)) or price <= 0:
+        return None
+    if price < 10_000:
+        return "under_10k"
+    if price < 50_000:
+        return "10k_50k"
+    if price < 200_000:
+        return "50k_200k"
+    return "200k_plus"
+
+
+def _deal_matched_entities(deal: dict[str, Any]) -> dict[str, list[str]]:
+    matches: dict[str, list[str]] = {}
+
+    category = _clean_entity_value(deal.get("category"))
+    if category and category.lower() not in _PRICE_CATEGORY_SKIP:
+        _add_entity(matches, "category", category)
+
+    platform = _clean_entity_value(deal.get("platform"))
+    if platform:
+        _add_entity(matches, "platform", platform)
+
+    source = _clean_entity_value(deal.get("source"))
+    if source:
+        _add_entity(matches, "source", source)
+
+    brand = _extract_brand_candidate(deal.get("title"), deal.get("brand"))
+    if brand:
+        _add_entity(matches, "brand", brand)
+
+    discount = _discount_bucket(deal.get("discount_rate"))
+    if discount:
+        _add_entity(matches, "discount", discount)
+
+    band = _price_band(deal.get("current_price"))
+    if band:
+        _add_entity(matches, "price_band", band)
+
+    return matches
+
+
 def _load_previous_product_states(
     store: GraphStore,
     product_ids: list[str],
@@ -268,7 +389,11 @@ def run_scoring(config: dict[str, Any]) -> None:
     print(f"스코어링 완료: 총 {total_scored}개 상품 ({elapsed:.2f}초)")
 
 
-def generate_report(config: dict[str, Any], output_dir: str | None = None) -> None:
+def generate_report(
+    config: dict[str, Any],
+    output_dir: str | None = None,
+    quality_report: dict[str, Any] | None = None,
+) -> None:
     """HTML 리포트 생성"""
     print("\n=== 리포트 생성 시작 ===")
 
@@ -305,9 +430,9 @@ def generate_report(config: dict[str, Any], output_dir: str | None = None) -> No
                 link=str(deal.get("url") or ""),
                 summary=str(deal.get("explanation") or summary),
                 published=published_at,
-                source=str(deal.get("platform") or deal.get("source") or "unknown"),
+                source=_deal_source(deal),
                 category=str(deal.get("category") or "price"),
-                matched_entities={},
+                matched_entities=_deal_matched_entities(deal),
                 collected_at=published_at,
             )
         )
@@ -318,11 +443,16 @@ def generate_report(config: dict[str, Any], output_dir: str | None = None) -> No
         sources=[],
         entities=[],
     )
+    matched_count = sum(1 for article in articles if article.matched_entities)
+    source_count = len({article.source for article in articles if article.source})
     stats = {
-        "sources": len({article.source for article in articles if article.source}),
+        "sources": source_count,
         "collected": len(articles),
-        "matched": 0,
+        "matched": matched_count,
         "window_days": 1,
+        "article_count": len(articles),
+        "source_count": source_count,
+        "matched_count": matched_count,
     }
     generate_core_report(
         category=category_config,
@@ -331,6 +461,7 @@ def generate_report(config: dict[str, Any], output_dir: str | None = None) -> No
         stats=stats,
         errors=None,
         store=store,
+        quality_report=quality_report,
     )
 
     # Generate unified index.html
@@ -347,6 +478,9 @@ def run_once(
     generate_report_flag: bool = False,
     notifier: PipelineNotifier | None = None,
     snapshot_db: bool = False,
+    keep_raw_days: int = 180,
+    keep_report_days: int = 90,
+    keep_snapshot_days: int = 30,
 ) -> None:
     """1회 실행"""
     print("\n" + "=" * 60)
@@ -359,29 +493,55 @@ def run_once(
     # 2. 스코어링
     run_scoring(config)
 
-    # 3. 리포트 생성 (옵션)
-    if generate_report_flag:
-        generate_report(config)
-
-    # 4. Apply date storage policy
-    if snapshot_db:
+    # 3. Data quality contract report
+    quality_report: dict[str, Any] | None = None
+    try:
+        report_dir = Path(config.get("reporting", {}).get("output_path", "reports"))
+        target_date = datetime.now(tz=UTC).date()
+        max_items = config.get("reporting", {}).get("max_items_per_report", 100)
+        db_path = config["database"]["path"]
+        quality_store = GraphStore(db_path)
         try:
-            db_path = config["database"]["path"]
-            date_storage = apply_date_storage_policy(
-                database_path=Path(db_path),
-                raw_data_dir=Path("data") / "raw",
-                report_dir=Path("reports"),
-                keep_raw_days=180,
-                keep_report_days=90,
-                snapshot_db=snapshot_db,
-            )
-            snapshot_path = date_storage.get("snapshot_path")
-            if isinstance(snapshot_path, str) and snapshot_path:
-                print(f"Snapshot saved to {snapshot_path}")
-        except Exception as e:
-            print(f"Snapshot creation failed: {e}")
+            quality_deals = quality_store.get_top_deals(limit=max_items)
+        finally:
+            quality_store.close()
+        quality_report = build_quality_report(
+            sources_config,
+            target_date=target_date,
+            deal_rows=quality_deals,
+        )
+        quality_paths = write_quality_report(
+            quality_report,
+            report_dir,
+            target_date=target_date,
+        )
+        print(f"Data quality report saved to {quality_paths['latest']}")
+    except Exception as e:
+        print(f"Data quality report generation failed: {e}")
 
-    # 5. 통계 출력
+    # 4. 리포트 생성 (옵션)
+    if generate_report_flag:
+        generate_report(config, quality_report=quality_report)
+
+    # 5. Apply date storage policy
+    try:
+        db_path = config["database"]["path"]
+        date_storage = apply_date_storage_policy(
+            database_path=Path(db_path),
+            raw_data_dir=Path("data") / "raw",
+            report_dir=Path("reports"),
+            keep_raw_days=keep_raw_days,
+            keep_report_days=keep_report_days,
+            keep_snapshot_days=keep_snapshot_days,
+            snapshot_db=snapshot_db,
+        )
+        snapshot_path = date_storage.get("snapshot_path")
+        if isinstance(snapshot_path, str) and snapshot_path:
+            print(f"Snapshot saved to {snapshot_path}")
+    except Exception as e:
+        print(f"Date storage policy failed: {e}")
+
+    # 6. 통계 출력
     db_path = config["database"]["path"]
     store = GraphStore(db_path)
     stats = store.get_stats()
@@ -406,6 +566,9 @@ def run_scheduler(
     interval_hours: int = 24,
     notifier: PipelineNotifier | None = None,
     snapshot_db: bool = False,
+    keep_raw_days: int = 180,
+    keep_report_days: int = 90,
+    keep_snapshot_days: int = 30,
 ) -> None:
     """주기적 실행"""
     print(f"스케줄러 시작 ({interval_hours}시간 간격)")
@@ -417,6 +580,9 @@ def run_scheduler(
             generate_report_flag=True,
             notifier=notifier,
             snapshot_db=snapshot_db,
+            keep_raw_days=keep_raw_days,
+            keep_report_days=keep_report_days,
+            keep_snapshot_days=keep_snapshot_days,
         )
 
         print(f"\n다음 실행까지 {interval_hours}시간 대기 중...")
@@ -461,6 +627,18 @@ def main() -> None:
     parser.add_argument(
         "--snapshot-db", action="store_true", default=False, help="Create database snapshot"
     )
+    parser.add_argument(
+        "--keep-raw-days", type=int, default=180, help="Retention window for raw JSONL directories"
+    )
+    parser.add_argument(
+        "--keep-report-days", type=int, default=90, help="Retention window for dated HTML reports"
+    )
+    parser.add_argument(
+        "--keep-snapshot-days",
+        type=int,
+        default=30,
+        help="Retention window for dated DuckDB snapshots",
+    )
 
     args = parser.parse_args()
 
@@ -478,6 +656,9 @@ def main() -> None:
             generate_report_flag=args.report,
             notifier=notifier,
             snapshot_db=args.snapshot_db,
+            keep_raw_days=args.keep_raw_days,
+            keep_report_days=args.keep_report_days,
+            keep_snapshot_days=args.keep_snapshot_days,
         )
     elif args.mode == "scheduler":
         run_scheduler(
@@ -486,6 +667,9 @@ def main() -> None:
             interval_hours=args.interval,
             notifier=notifier,
             snapshot_db=args.snapshot_db,
+            keep_raw_days=args.keep_raw_days,
+            keep_report_days=args.keep_report_days,
+            keep_snapshot_days=args.keep_snapshot_days,
         )
 
 

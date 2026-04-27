@@ -2,14 +2,14 @@ from __future__ import annotations
 
 import json
 from collections.abc import Iterable
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, date, datetime, timedelta
 from pathlib import Path
 from typing import cast
 
 import duckdb
 
 from .exceptions import StorageError
-from .models import Article
+from .models import Article, PriceEvent, PriceSnapshot, Product
 
 
 def _utc_naive(dt: datetime | None) -> datetime | None:
@@ -175,14 +175,171 @@ class RadarStorage:
         )
         return to_delete
 
-    def create_daily_snapshot(self, snapshot_dir: str | None = None) -> Path | None:
+    def create_daily_snapshot(
+        self,
+        snapshot_dir: str | None = None,
+        snapshot_date: date | None = None,
+    ) -> Path | None:
         from .date_storage import snapshot_database
 
-        snapshot_root = Path(snapshot_dir) if snapshot_dir else self.db_path.parent / "daily"
-        return snapshot_database(self.db_path, snapshot_root=snapshot_root)
+        snapshot_root = Path(snapshot_dir) if snapshot_dir else self.db_path.parent / "snapshots"
+        _ = self.conn.execute("CHECKPOINT")
+        self.conn.close()
+        try:
+            return snapshot_database(
+                self.db_path,
+                snapshot_date=snapshot_date,
+                snapshot_root=snapshot_root,
+            )
+        finally:
+            self.conn = duckdb.connect(str(self.db_path))
+            self._ensure_tables()
 
     def cleanup_old_snapshots(self, snapshot_dir: str | None = None, keep_days: int = 90) -> int:
-        from .date_storage import cleanup_date_directories
+        from .date_storage import cleanup_snapshots
 
-        snapshot_root = Path(snapshot_dir) if snapshot_dir else self.db_path.parent / "daily"
-        return cleanup_date_directories(snapshot_root, keep_days=keep_days)
+        snapshot_root = Path(snapshot_dir) if snapshot_dir else self.db_path.parent / "snapshots"
+        return cleanup_snapshots(snapshot_root, keep_days=keep_days)
+
+
+class PriceStorage:
+    """DuckDB storage for normalized price pipeline output."""
+
+    def __init__(self, db_path: Path | str):
+        self.db_path = Path(db_path)
+        self.db_path.parent.mkdir(parents=True, exist_ok=True)
+        self.conn: duckdb.DuckDBPyConnection = duckdb.connect(str(self.db_path))
+        self._ensure_tables()
+
+    def close(self) -> None:
+        self.conn.close()
+
+    def _ensure_tables(self) -> None:
+        _ = self.conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS products (
+                id TEXT PRIMARY KEY,
+                title TEXT NOT NULL,
+                category TEXT NOT NULL,
+                brand TEXT,
+                source_platform TEXT NOT NULL,
+                product_url TEXT NOT NULL,
+                image_url TEXT,
+                attributes_json TEXT
+            );
+            CREATE TABLE IF NOT EXISTS price_snapshots (
+                product_id TEXT NOT NULL,
+                ts TIMESTAMP NOT NULL,
+                price INTEGER NOT NULL,
+                avg_price_30d INTEGER,
+                avg_price_90d INTEGER,
+                discount_rate_vs_avg DOUBLE,
+                discount_rate_vs_list DOUBLE,
+                source TEXT NOT NULL,
+                meta_json TEXT
+            );
+            CREATE TABLE IF NOT EXISTS price_events (
+                product_id TEXT NOT NULL,
+                event_ts TIMESTAMP NOT NULL,
+                event_type TEXT NOT NULL,
+                drop_rate DOUBLE,
+                saving_vs_avg INTEGER,
+                radar_score DOUBLE NOT NULL,
+                explanation TEXT NOT NULL
+            );
+            """
+        )
+
+    def upsert_products(self, products: Iterable[Product]) -> int:
+        rows = [
+            (
+                product.id,
+                product.title,
+                product.category,
+                product.brand,
+                product.source_platform,
+                product.product_url,
+                product.image_url,
+                json.dumps(product.attributes, ensure_ascii=False),
+            )
+            for product in products
+        ]
+        if not rows:
+            return 0
+
+        _ = self.conn.executemany(
+            """
+            INSERT INTO products (
+                id, title, category, brand, source_platform, product_url, image_url, attributes_json
+            )
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            ON CONFLICT(id) DO UPDATE SET
+                title = EXCLUDED.title,
+                category = EXCLUDED.category,
+                brand = EXCLUDED.brand,
+                source_platform = EXCLUDED.source_platform,
+                product_url = EXCLUDED.product_url,
+                image_url = EXCLUDED.image_url,
+                attributes_json = EXCLUDED.attributes_json
+            """,
+            rows,
+        )
+        return len(rows)
+
+    def insert_snapshots(self, snapshots: Iterable[PriceSnapshot]) -> int:
+        rows = [
+            (
+                snapshot.product_id,
+                _utc_naive(snapshot.ts),
+                snapshot.price,
+                snapshot.avg_price_30d,
+                snapshot.avg_price_90d,
+                snapshot.discount_rate_vs_avg,
+                snapshot.discount_rate_vs_list,
+                snapshot.source,
+                json.dumps(snapshot.meta, ensure_ascii=False),
+            )
+            for snapshot in snapshots
+        ]
+        if not rows:
+            return 0
+
+        _ = self.conn.executemany(
+            """
+            INSERT INTO price_snapshots (
+                product_id, ts, price, avg_price_30d, avg_price_90d,
+                discount_rate_vs_avg, discount_rate_vs_list, source, meta_json
+            )
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            rows,
+        )
+        return len(rows)
+
+    def insert_events(self, events: Iterable[PriceEvent]) -> int:
+        rows = [
+            (
+                event.product_id,
+                _utc_naive(event.event_ts),
+                event.event_type,
+                event.drop_rate,
+                event.saving_vs_avg,
+                event.radar_score,
+                event.explanation,
+            )
+            for event in events
+        ]
+        if not rows:
+            return 0
+
+        _ = self.conn.executemany(
+            """
+            INSERT INTO price_events (
+                product_id, event_ts, event_type, drop_rate,
+                saving_vs_avg, radar_score, explanation
+            )
+            VALUES (?, ?, ?, ?, ?, ?, ?)
+            """,
+            rows,
+        )
+        return len(rows)

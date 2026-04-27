@@ -119,6 +119,17 @@ def validate_price_range(
     return min_price <= price <= max_price
 
 
+def validate_nonnegative_amount(
+    amount: int | None,
+    max_amount: int = 1_000_000_000,
+) -> bool:
+    if amount is None:
+        return True
+    if isinstance(amount, bool) or not isinstance(amount, int):
+        return False
+    return 0 <= amount <= max_amount
+
+
 def validate_discount_rate(discount_rate: float | None) -> bool:
     """
     Validate if discount rate is within acceptable range (0.0 - 1.0).
@@ -258,6 +269,11 @@ def validate_article(article: Any) -> tuple[bool, list[str]]:
     current_price = _get_value(article, "current_price")
     avg_price = _get_value(article, "avg_price")
     list_price = _get_value(article, "list_price")
+    discount_price = _get_value(article, "discount_price")
+    effective_price = _get_value(article, "effective_price")
+    coupon_value = _get_value(article, "coupon_value")
+    card_benefit = _get_value(article, "card_benefit")
+    shipping_fee = _get_value(article, "shipping_fee")
     discount_rate = _get_value(article, "discount_rate")
 
     if not title or not isinstance(title, str):
@@ -287,6 +303,16 @@ def validate_article(article: Any) -> tuple[bool, list[str]]:
         errors.append(f"avg_price out of range: {avg_price}")
     if not validate_price_range(list_price):
         errors.append(f"list_price out of range: {list_price}")
+    if not validate_price_range(discount_price):
+        errors.append(f"discount_price out of range: {discount_price}")
+    if not validate_price_range(effective_price):
+        errors.append(f"effective_price out of range: {effective_price}")
+    if not validate_nonnegative_amount(coupon_value):
+        errors.append(f"coupon_value out of range: {coupon_value}")
+    if not validate_nonnegative_amount(card_benefit):
+        errors.append(f"card_benefit out of range: {card_benefit}")
+    if not validate_nonnegative_amount(shipping_fee):
+        errors.append(f"shipping_fee out of range: {shipping_fee}")
     if not validate_discount_rate(discount_rate):
         errors.append(f"discount_rate out of range: {discount_rate}")
 

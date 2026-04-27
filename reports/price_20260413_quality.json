@@ -1,0 +1,484 @@
+{
+  "generated_at": "2026-04-13T08:21:21.410284+00:00",
+  "target_date": "2026-04-13",
+  "repo": "PriceRadar",
+  "summary": {
+    "priority": "P1",
+    "primary_motion": "conversion",
+    "configured_source_count": 10,
+    "enabled_source_count": 9,
+    "canonical_key_coverage": 1.0,
+    "effective_price_coverage": 1.0,
+    "stock_signal_coverage": 1.0,
+    "verification_signal_coverage": 1.0,
+    "official_source_backlog_count": 3,
+    "missing_required_components": []
+  },
+  "required_components": {
+    "canonical_key_fields": [
+      "source_id",
+      "platform",
+      "product_id",
+      "option_signature"
+    ],
+    "effective_price_fields": [
+      "list_price",
+      "discount_price",
+      "coupon_value",
+      "card_benefit",
+      "shipping_fee",
+      "effective_price"
+    ],
+    "event_models": [
+      "sku_price_snapshot",
+      "purchase_benefit_snapshot",
+      "stock_status_transition"
+    ]
+  },
+  "quality_gates": [
+    {
+      "name": "canonical_sku_key",
+      "status": "ok",
+      "description": "enabled sources define canonical SKU key fields"
+    },
+    {
+      "name": "effective_price_components",
+      "status": "ok",
+      "description": "enabled sources preserve list/discount/coupon/card/shipping/effective price fields"
+    },
+    {
+      "name": "stock_status_transition",
+      "status": "ok",
+      "description": "at least one enabled source contract tracks stock or stockout transitions"
+    },
+    {
+      "name": "verification_roles",
+      "status": "ok",
+      "description": "enabled sources are tagged with verification roles"
+    },
+    {
+      "name": "official_source_backlog",
+      "status": "ok",
+      "description": "official brand/store candidates are tracked separately before activation"
+    },
+    {
+      "name": "상품명, 옵션, 용량을 canonical SKU key로 정규화",
+      "status": "documented",
+      "description": "상품명, 옵션, 용량을 canonical SKU key로 정규화"
+    },
+    {
+      "name": "표시가, 할인가, 실구매가, 배송비를 별도 필드로 유지",
+      "status": "documented",
+      "description": "표시가, 할인가, 실구매가, 배송비를 별도 필드로 유지"
+    },
+    {
+      "name": "급격한 가격 변동은 outlier flag와 원문 URL을 함께 기록",
+      "status": "documented",
+      "description": "급격한 가격 변동은 outlier flag와 원문 URL을 함께 기록"
+    },
+    {
+      "name": "공식 브랜드/스토어 후보는 ToS와 파싱 안정성 검증 후 활성화",
+      "status": "documented",
+      "description": "공식 브랜드/스토어 후보는 ToS와 파싱 안정성 검증 후 활성화"
+    }
+  ],
+  "source_status": [
+    {
+      "id": "fallcent_main",
+      "name": "폴센트 메인",
+      "type": "fallcent",
+      "enabled": true,
+      "trust_tier": "T2_expert",
+      "category": "all",
+      "event_models": [
+        "sku_price_snapshot",
+        "purchase_benefit_snapshot",
+        "stock_status_transition"
+      ],
+      "canonical_key_fields": [
+        "source_id",
+        "platform",
+        "product_id",
+        "url",
+        "option_signature"
+      ],
+      "effective_price_fields": [
+        "list_price",
+        "discount_price",
+        "coupon_value",
+        "card_benefit",
+        "shipping_fee",
+        "effective_price"
+      ],
+      "stock_fields": [
+        "stock_status",
+        "sold_out_at",
+        "restocked_at"
+      ],
+      "verification_role": "price_history_reference",
+      "has_canonical_key": true,
+      "has_effective_price_fields": true,
+      "has_stock_signal": true,
+      "has_verification_role": true
+    },
+    {
+      "id": "enuri_main",
+      "name": "에누리 메인",
+      "type": "enuri",
+      "enabled": true,
+      "trust_tier": "T2_expert",
+      "category": "all",
+      "event_models": [
+        "sku_price_snapshot",
+        "purchase_benefit_snapshot",
+        "stock_status_transition"
+      ],
+      "canonical_key_fields": [
+        "source_id",
+        "platform",
+        "product_id",
+        "url",
+        "option_signature"
+      ],
+      "effective_price_fields": [
+        "list_price",
+        "discount_price",
+        "coupon_value",
+        "card_benefit",
+        "shipping_fee",
+        "effective_price"
+      ],
+      "stock_fields": [
+        "stock_status",
+        "sold_out_at",
+        "restocked_at"
+      ],
+      "verification_role": "price_compare_reference",
+      "has_canonical_key": true,
+      "has_effective_price_fields": true,
+      "has_stock_signal": true,
+      "has_verification_role": true
+    },
+    {
+      "id": "algumon_main",
+      "name": "알구몬 메인",
+      "type": "algumon",
+      "enabled": true,
+      "trust_tier": "T2_expert",
+      "category": "electronics",
+      "event_models": [
+        "deal_listing",
+        "purchase_benefit_snapshot"
+      ],
+      "canonical_key_fields": [
+        "source_id",
+        "platform",
+        "product_id",
+        "url",
+        "option_signature"
+      ],
+      "effective_price_fields": [
+        "list_price",
+        "discount_price",
+        "coupon_value",
+        "card_benefit",
+        "shipping_fee",
+        "effective_price"
+      ],
+      "stock_fields": [
+        "stock_status",
+        "sold_out_at",
+        "restocked_at"
+      ],
+      "verification_role": "community_deal_reference",
+      "has_canonical_key": true,
+      "has_effective_price_fields": true,
+      "has_stock_signal": true,
+      "has_verification_role": true
+    },
+    {
+      "id": "ruliweb_market",
+      "name": "루리웹 장터",
+      "type": "ruliweb",
+      "enabled": true,
+      "trust_tier": "T2_expert",
+      "category": "market",
+      "event_models": [
+        "deal_listing",
+        "resale_signal"
+      ],
+      "canonical_key_fields": [
+        "source_id",
+        "platform",
+        "product_id",
+        "url",
+        "option_signature"
+      ],
+      "effective_price_fields": [
+        "list_price",
+        "discount_price",
+        "coupon_value",
+        "card_benefit",
+        "shipping_fee",
+        "effective_price"
+      ],
+      "stock_fields": [
+        "stock_status",
+        "sold_out_at",
+        "restocked_at"
+      ],
+      "verification_role": "community_deal_reference",
+      "has_canonical_key": true,
+      "has_effective_price_fields": true,
+      "has_stock_signal": true,
+      "has_verification_role": true
+    },
+    {
+      "id": "quasarzone_saleinfo",
+      "name": "퀘이사존 핫딜",
+      "type": "quasarzone",
+      "enabled": true,
+      "trust_tier": "T2_expert",
+      "category": "electronics",
+      "event_models": [
+        "deal_listing",
+        "purchase_benefit_snapshot"
+      ],
+      "canonical_key_fields": [
+        "source_id",
+        "platform",
+        "product_id",
+        "url",
+        "option_signature"
+      ],
+      "effective_price_fields": [
+        "list_price",
+        "discount_price",
+        "coupon_value",
+        "card_benefit",
+        "shipping_fee",
+        "effective_price"
+      ],
+      "stock_fields": [
+        "stock_status",
+        "sold_out_at",
+        "restocked_at"
+      ],
+      "verification_role": "expert_deal_reference",
+      "has_canonical_key": true,
+      "has_effective_price_fields": true,
+      "has_stock_signal": true,
+      "has_verification_role": true
+    },
+    {
+      "id": "clien_albulgumai",
+      "name": "클리앙 알뜰구매",
+      "type": "clien",
+      "enabled": true,
+      "trust_tier": "T2_expert",
+      "category": "market",
+      "event_models": [
+        "deal_listing",
+        "purchase_benefit_snapshot"
+      ],
+      "canonical_key_fields": [
+        "source_id",
+        "platform",
+        "product_id",
+        "url",
+        "option_signature"
+      ],
+      "effective_price_fields": [
+        "list_price",
+        "discount_price",
+        "coupon_value",
+        "card_benefit",
+        "shipping_fee",
+        "effective_price"
+      ],
+      "stock_fields": [
+        "stock_status",
+        "sold_out_at",
+        "restocked_at"
+      ],
+      "verification_role": "community_deal_reference",
+      "has_canonical_key": true,
+      "has_effective_price_fields": true,
+      "has_stock_signal": true,
+      "has_verification_role": true
+    },
+    {
+      "id": "fmkorea_hotdeal",
+      "name": "펨코 핫딜",
+      "type": "fmkorea",
+      "enabled": true,
+      "trust_tier": "T2_expert",
+      "category": "market",
+      "event_models": [
+        "deal_listing",
+        "purchase_benefit_snapshot"
+      ],
+      "canonical_key_fields": [
+        "source_id",
+        "platform",
+        "product_id",
+        "url",
+        "option_signature"
+      ],
+      "effective_price_fields": [
+        "list_price",
+        "discount_price",
+        "coupon_value",
+        "card_benefit",
+        "shipping_fee",
+        "effective_price"
+      ],
+      "stock_fields": [
+        "stock_status",
+        "sold_out_at",
+        "restocked_at"
+      ],
+      "verification_role": "community_deal_reference",
+      "has_canonical_key": true,
+      "has_effective_price_fields": true,
+      "has_stock_signal": true,
+      "has_verification_role": true
+    },
+    {
+      "id": "dealbada_main",
+      "name": "딜바다",
+      "type": "dealbada",
+      "enabled": true,
+      "trust_tier": "T2_expert",
+      "category": "market",
+      "event_models": [
+        "deal_listing",
+        "purchase_benefit_snapshot"
+      ],
+      "canonical_key_fields": [
+        "source_id",
+        "platform",
+        "product_id",
+        "url",
+        "option_signature"
+      ],
+      "effective_price_fields": [
+        "list_price",
+        "discount_price",
+        "coupon_value",
+        "card_benefit",
+        "shipping_fee",
+        "effective_price"
+      ],
+      "stock_fields": [
+        "stock_status",
+        "sold_out_at",
+        "restocked_at"
+      ],
+      "verification_role": "community_deal_reference",
+      "has_canonical_key": true,
+      "has_effective_price_fields": true,
+      "has_stock_signal": true,
+      "has_verification_role": true
+    },
+    {
+      "id": "danawa_browser",
+      "name": "다나와 가격비교",
+      "type": "danawa",
+      "enabled": true,
+      "trust_tier": "T2_expert",
+      "category": "electronics",
+      "event_models": [
+        "sku_price_snapshot",
+        "purchase_benefit_snapshot",
+        "stock_status_transition"
+      ],
+      "canonical_key_fields": [
+        "source_id",
+        "platform",
+        "product_id",
+        "url",
+        "option_signature"
+      ],
+      "effective_price_fields": [
+        "list_price",
+        "discount_price",
+        "coupon_value",
+        "card_benefit",
+        "shipping_fee",
+        "effective_price"
+      ],
+      "stock_fields": [
+        "stock_status",
+        "sold_out_at",
+        "restocked_at"
+      ],
+      "verification_role": "price_compare_reference",
+      "has_canonical_key": true,
+      "has_effective_price_fields": true,
+      "has_stock_signal": true,
+      "has_verification_role": true
+    },
+    {
+      "id": "ppomppu_browser",
+      "name": "뽐뿌 핫딜",
+      "type": "ppomppu",
+      "enabled": false,
+      "trust_tier": "T2_expert",
+      "category": "market",
+      "event_models": [
+        "sku_price_snapshot",
+        "purchase_benefit_snapshot",
+        "stock_status_transition"
+      ],
+      "canonical_key_fields": [
+        "source_id",
+        "platform",
+        "product_id",
+        "url",
+        "option_signature"
+      ],
+      "effective_price_fields": [
+        "list_price",
+        "discount_price",
+        "coupon_value",
+        "card_benefit",
+        "shipping_fee",
+        "effective_price"
+      ],
+      "stock_fields": [
+        "stock_status",
+        "sold_out_at",
+        "restocked_at"
+      ],
+      "verification_role": "market_price_reference",
+      "has_canonical_key": true,
+      "has_effective_price_fields": true,
+      "has_stock_signal": true,
+      "has_verification_role": true
+    }
+  ],
+  "official_source_backlog": [
+    {
+      "id": "coupang_brand_store_candidates",
+      "name": "Coupang brand/store official pages",
+      "activation_gate": "ToS review, selector stability, stock status fidelity"
+    },
+    {
+      "id": "naver_brand_store_candidates",
+      "name": "Naver Brand Store official pages",
+      "activation_gate": "API/browser policy review, option canonicalization"
+    },
+    {
+      "id": "manufacturer_store_candidates",
+      "name": "Manufacturer direct stores",
+      "activation_gate": "canonical brand mapping and shipping fee extraction"
+    }
+  ],
+  "recommendations": [
+    "공식 브랜드/스토어 후보는 ToS와 파싱 안정성 검증 후 단계적으로 활성화한다.",
+    "공식 브랜드/스토어 source 후보를 검증해 authority 공백을 보완",
+    "SKU 가격 이력, 재고, 쿠폰/카드혜택을 같은 이벤트 모델로 정렬",
+    "가격 outlier와 품절 전환 리포트를 검증 산출물에 포함"
+  ]
+}

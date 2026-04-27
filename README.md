@@ -60,6 +60,10 @@ python main.py --mode scheduler --interval 24
 
 - `PRICERADAR_DB_PATH`: DuckDB 파일 경로. 기본값은 `data/priceradar.duckdb`.
 
+### 데이터 품질 리포트
+
+`config/sources.yaml`의 `data_quality` 계약은 SKU key, 실구매가 구성요소, 재고 전환, 공식 스토어 후보를 매일 점검한다. `python -m priceradar.quality_report --sources config/sources.yaml --output-dir reports`를 실행하면 `reports/price_quality.json`과 `reports/price_YYYYMMDD_quality.json`이 생성된다.
+
 ## 프로젝트 구조
 
 ```
@@ -225,3 +229,15 @@ python main.py --mode once --report
 ## 라이선스
 
 MIT License – 자세한 내용은 [LICENSE](LICENSE)를 참고하세요.
+
+<!-- DATAHUB-OPS-AUDIT:START -->
+## DataHub Operations
+
+- CI/CD workflows: `daily-collection.yml`, `pr-checks.yml`, `radar-crawler.yml`, `release.yml`.
+- GitHub Pages visualization: `reports/index.html` (valid HTML); https://ai-frendly-datahub.github.io/PriceRadar/.
+- Latest remote Pages check: HTTP 200, HTML.
+- Local workspace audit: 70 Python files parsed, 0 syntax errors.
+- Re-run audit from the workspace root: `python scripts/audit_ci_pages_readme.py --syntax-check --write`.
+- Latest audit report: `_workspace/2026-04-14_github_ci_pages_readme_audit.md`.
+- Latest Pages URL report: `_workspace/2026-04-14_github_pages_url_check.md`.
+<!-- DATAHUB-OPS-AUDIT:END -->

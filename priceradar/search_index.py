@@ -18,6 +18,12 @@ class SearchIndex:
         self.db_path.parent.mkdir(parents=True, exist_ok=True)
         self._init_schema()
 
+    def __enter__(self) -> SearchIndex:
+        return self
+
+    def __exit__(self, *args: object) -> None:
+        self.close()
+
     def _connect(self) -> sqlite3.Connection:
         return sqlite3.connect(self.db_path)
 
@@ -53,3 +59,6 @@ class SearchIndex:
             ).fetchall()
 
         return [SearchResult(link=row[0], title=row[1], body=row[2]) for row in rows]
+
+    def close(self) -> None:
+        return None

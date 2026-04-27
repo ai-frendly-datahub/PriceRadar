@@ -22,6 +22,7 @@ from urllib3.util.retry import Retry
 from priceradar.resilience import SourceCircuitBreakerManager
 from priceradar.validators import (
     validate_discount_rate,
+    validate_nonnegative_amount,
     validate_price_range,
     validate_url_format,
 )
@@ -49,16 +50,24 @@ class RawItem:
     current_price: int | None = None
     avg_price: int | None = None
     list_price: int | None = None
+    discount_price: int | None = None
+    coupon_value: int | None = None
+    card_benefit: int | None = None
+    shipping_fee: int | None = None
+    effective_price: int | None = None
     discount_rate: float | None = None
 
     category: str | None = None
     platform: str | None = None
+    option_signature: str | None = None
     image_url: str | None = None
     brand: str | None = None
+    stock_status: str | None = None
 
     is_hotdeal: bool = False
     is_popular: bool = False
     is_lowest_now: bool = False
+    outlier_flag: bool = False
 
     raw_data: dict[str, Any] = field(default_factory=dict)
 
@@ -213,14 +222,19 @@ class BaseCollector(ABC):
             return False
 
         # 가격 범위 검증 (None 허용 - 선택적 필드)
-        if item.current_price is not None and not validate_price_range(item.current_price):
-            return False
+        for price in (
+            item.current_price,
+            item.avg_price,
+            item.list_price,
+            item.discount_price,
+            item.effective_price,
+        ):
+            if price is not None and not validate_price_range(price):
+                return False
 
-        if item.avg_price is not None and not validate_price_range(item.avg_price):
-            return False
-
-        if item.list_price is not None and not validate_price_range(item.list_price):
-            return False
+        for amount in (item.coupon_value, item.card_benefit, item.shipping_fee):
+            if not validate_nonnegative_amount(amount):
+                return False
 
         # 할인율 검증 (None 허용)
         if item.discount_rate is not None and not validate_discount_rate(item.discount_rate):

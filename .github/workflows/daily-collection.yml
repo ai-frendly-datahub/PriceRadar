@@ -13,6 +13,9 @@ concurrency:
   group: priceradar-collection
   cancel-in-progress: false
 
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
+
 jobs:
   collect-and-report:
     runs-on: ubuntu-latest
@@ -34,7 +37,7 @@ jobs:
 
     - name: Run collection and generate report
       run: |
-        python main.py --mode once --report --config config/config.yaml --sources config/sources.yaml --notifications config/notifications.yaml --snapshot-db
+        python main.py --mode once --report --config config/config.yaml --sources config/sources.yaml --notifications config/notifications.yaml --snapshot-db --keep-raw-days 180 --keep-report-days 90 --keep-snapshot-days 30
 
     - name: Generate index.html
       run: |
@@ -68,6 +71,7 @@ jobs:
         git config --local user.name "GitHub Action"
         git add reports/
         git add data/priceradar.duckdb
+        git add data/raw/ || true
         git add data/snapshots/ || true
         git diff --quiet && git diff --staged --quiet || (git commit -m "Daily collection: $(date +'%Y-%m-%d')" && git push)
       env:
