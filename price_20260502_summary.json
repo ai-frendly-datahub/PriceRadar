@@ -1,16 +1,16 @@
 {
-  "date": "2026-05-01",
+  "date": "2026-05-02",
   "category": "price",
   "article_count": 100,
   "source_count": 5,
   "matched_count": 0,
   "top_entities": [],
   "sources": {
-    "coupang": 28,
-    "unknown": 44,
+    "coupang": 27,
+    "unknown": 45,
     "elevenst": 12,
     "naver": 1,
     "gmarket": 15
   },
-  "generated_at": "2026-05-01T10:20:48.145374+00:00"
+  "generated_at": "2026-05-02T11:49:40.945817+09:00"
 }
