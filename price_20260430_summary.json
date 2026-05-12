@@ -2,15 +2,130 @@
   "date": "2026-04-30",
   "category": "price",
   "article_count": 100,
-  "source_count": 5,
-  "matched_count": 0,
-  "top_entities": [],
+  "source_count": 4,
+  "matched_count": 100,
+  "top_entities": [
+    {
+      "name": "price_band:10k_50k",
+      "count": 62
+    },
+    {
+      "name": "source:enuri_main",
+      "count": 61
+    },
+    {
+      "name": "discount:50%+",
+      "count": 43
+    },
+    {
+      "name": "platform:coupang",
+      "count": 31
+    },
+    {
+      "name": "discount:70%+",
+      "count": 27
+    },
+    {
+      "name": "discount:30%+",
+      "count": 23
+    },
+    {
+      "name": "source:fallcent_electronics",
+      "count": 18
+    },
+    {
+      "name": "category:electronics",
+      "count": 18
+    },
+    {
+      "name": "platform:gmarket",
+      "count": 16
+    },
+    {
+      "name": "price_band:200k_plus",
+      "count": 14
+    },
+    {
+      "name": "source:fallcent_main",
+      "count": 13
+    },
+    {
+      "name": "platform:elevenst",
+      "count": 12
+    },
+    {
+      "name": "price_band:under_10k",
+      "count": 11
+    },
+    {
+      "name": "brand:LG전자",
+      "count": 9
+    },
+    {
+      "name": "source:algumon_main",
+      "count": 8
+    },
+    {
+      "name": "category:fashion",
+      "count": 7
+    },
+    {
+      "name": "discount:discounted",
+      "count": 7
+    },
+    {
+      "name": "brand:삼성전자",
+      "count": 6
+    },
+    {
+      "name": "brand:불스원",
+      "count": 5
+    },
+    {
+      "name": "price_band:50k_200k",
+      "count": 5
+    }
+  ],
   "sources": {
-    "coupang": 30,
-    "unknown": 42,
-    "elevenst": 12,
-    "naver": 1,
-    "gmarket": 15
+    "fallcent_electronics": 18,
+    "enuri_main": 61,
+    "fallcent_main": 13,
+    "algumon_main": 8
   },
-  "generated_at": "2026-04-30T10:51:32.511812+00:00"
+  "generated_at": "2026-04-30T10:51:26.138388+09:00",
+  "ontology": {
+    "repo": "PriceRadar",
+    "category": "price",
+    "ontology_version": "0.1.0",
+    "event_model_ids": [
+      "price.purchase_benefit_snapshot",
+      "price.sku_price_snapshot",
+      "price.stock_status_transition"
+    ],
+    "event_model_mappings": {
+      "sku_price_snapshot": "price.sku_price_snapshot",
+      "purchase_benefit_snapshot": "price.purchase_benefit_snapshot",
+      "stock_status_transition": "price.stock_status_transition"
+    },
+    "entity_type_hints": [
+      "commerce.sku",
+      "commerce.vendor"
+    ],
+    "source_role_ids": [
+      "community_signal",
+      "context_only",
+      "operational_evidence"
+    ],
+    "source_role_mappings": {
+      "fallcent_main": "operational_evidence",
+      "enuri_main": "operational_evidence",
+      "algumon_main": "community_signal",
+      "Retail Dive": "context_only"
+    },
+    "evidence_policy_ids": [
+      "traceable_url_required",
+      "cross_reference_required",
+      "non_authoritative_context_only"
+    ]
+  }
 }
