@@ -67,6 +67,7 @@ test_*.py
 !tests/unit/test_quality_report.py
 !tests/unit/test_date_storage.py
 !tests/unit/test_price_contract_fields.py
+!tests/unit/test_anomaly.py
 debug_*.py
 check_db.py
 find_*.py
