@@ -64,6 +64,16 @@ def generate_report(
     if quality_report:
         extra_sections.append(_build_price_quality_section(quality_report))
 
+    # --- Price anomaly section ---
+    if store is not None:
+        try:
+            anomaly_section = _build_price_anomaly_section(store)
+            if anomaly_section is not None:
+                extra_sections.append(anomaly_section)
+        except Exception:
+            # Anomaly detection is best-effort; never break a report run.
+            pass
+
     return core_generate_report(
         category=category,
         articles=articles_list,
@@ -85,6 +95,86 @@ def generate_index_html(report_dir: Path, summaries_dir: Path | None = None) -> 
     core_generate_index_html, _core_generate_report = _load_core_report_utils()
     radar_name = "Price Radar"
     return core_generate_index_html(report_dir, radar_name)
+
+
+def _build_price_anomaly_section(store: object) -> dict[str, Any] | None:
+    """Query recent price_snapshots from PriceStorage and surface the
+    spike / cliff anomalies as an extra report section.
+
+    Returns None if no anomalies fired.
+    """
+    from collections import defaultdict
+    from datetime import UTC, datetime, timedelta
+
+    from .anomaly import PricePoint, detect_for_products
+
+    conn = getattr(store, "conn", None)
+    if conn is None:
+        return None
+    cutoff = (datetime.now(UTC) - timedelta(days=30)).strftime("%Y-%m-%d %H:%M:%S")
+    try:
+        cursor = conn.execute(
+            "SELECT product_id, ts, price FROM price_snapshots WHERE ts >= ? "
+            "ORDER BY product_id, ts",
+            [cutoff],
+        )
+        rows = cursor.fetchall()
+    except Exception:
+        return None
+    if not rows:
+        return None
+
+    histories: dict[str, list[PricePoint]] = defaultdict(list)
+    for product_id, ts, price in rows:
+        if isinstance(ts, datetime):
+            stamp = ts
+        else:
+            try:
+                stamp = datetime.fromisoformat(str(ts))
+            except ValueError:
+                continue
+        if stamp.tzinfo is None:
+            stamp = stamp.replace(tzinfo=UTC)
+        histories[str(product_id)].append(PricePoint(stamp, float(price)))
+
+    anomalies = detect_for_products(list(histories.items()))
+    if not anomalies:
+        return None
+
+    anomalies.sort(key=lambda a: abs(a.z_score), reverse=True)
+    top = anomalies[:20]
+    body_rows = "".join(
+        "<tr>"
+        f"<td>{escape(a.product_id)}</td>"
+        f"<td>{a.kind}</td>"
+        f"<td class='num'>{a.price:.0f}</td>"
+        f"<td class='num'>{a.baseline_mean:.0f}</td>"
+        f"<td class='num'>{a.z_score:+.2f}</td>"
+        f"<td>{a.timestamp.strftime('%Y-%m-%d')}</td>"
+        "</tr>"
+        for a in top
+    )
+    body = (
+        '<div class="price-anomaly-wrap">'
+        '<table class="price-anomaly">'
+        "<thead><tr>"
+        "<th>Product</th><th>Kind</th><th>Price</th>"
+        "<th>Baseline</th><th>Z</th><th>When</th>"
+        "</tr></thead>"
+        f"<tbody>{body_rows}</tbody>"
+        "</table>"
+        f"<p class='price-anomaly-note'>Total anomalies in window: {len(anomalies)}</p>"
+        "</div>"
+    )
+    return {
+        "id": "price-anomaly",
+        "aria_label": "Price spike / cliff anomalies",
+        "title": "Price Anomalies",
+        "panel_title": "Price Anomalies",
+        "subtitle": "z-score detection over the last 30 days of snapshots",
+        "badges": [],
+        "body_html": body,
+    }
 
 
 def _build_price_quality_section(quality_report: Mapping[str, Any]) -> dict[str, Any]:
