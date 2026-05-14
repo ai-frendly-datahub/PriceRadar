@@ -293,7 +293,9 @@ class BaseCollector(ABC):
 
         cleaned = normalized.replace("원", " ")
         cleaned = re.sub(r"[₩￦$€£¥]", " ", cleaned)
-        cleaned = cleaned.replace(",", " ")
+        # Commas are thousands separators in price strings ("14,460" -> "14460").
+        # Removing them (instead of replacing with space) keeps the full number intact.
+        cleaned = cleaned.replace(",", "")
         cleaned = re.sub(r"\s+", " ", cleaned).strip()
 
         matched = re.search(r"\d+(?:\.\d+)?", cleaned)

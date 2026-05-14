@@ -249,7 +249,22 @@ class QuasarzoneCollector(BaseCollector):
         )
 
     def _extract_price(self, text: str | None) -> int | None:
-        return self._parse_price_value(text)
+        """span.text-orange 의 가격 텍스트를 정수 KRW 로 변환.
+
+        2026-05 기준 퀘이사존 row 의 가격 텍스트는 "￦ 14,460 (KRW)" 또는
+        "￦ 16,750원 (KRW)" 형식이다. BaseCollector._parse_price_value 가
+        콤마를 공백으로 치환한 뒤 첫 숫자 토큰만 잡아내므로 "14" 처럼 잘려
+        나오는 회귀가 있었다. 매치 단계에서 천단위 콤마를 보존하는 패턴으로
+        토큰을 먼저 뽑고, 콤마를 제거한 다음 숫자만 base helper 에 넘긴다.
+        """
+        if not text:
+            return None
+
+        match = re.search(r"(\d{1,3}(?:,\d{3})+|\d{3,})", text)
+        if not match:
+            return self._parse_price_value(text)
+
+        return self._parse_price_value(match.group(1).replace(",", ""))
 
     def _extract_price_from_title(self, title: str) -> int | None:
         if not title:

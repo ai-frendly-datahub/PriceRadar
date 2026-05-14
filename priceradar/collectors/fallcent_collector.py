@@ -9,7 +9,7 @@ from __future__ import annotations
 import re
 from datetime import UTC, datetime
 from typing import Any
-from urllib.parse import parse_qs, urljoin, urlparse
+from urllib.parse import urljoin, urlparse
 
 import requests
 import structlog
@@ -75,136 +75,142 @@ class FallcentCollector(BaseCollector):
             raise
 
     def _parse_products(self, soup: BeautifulSoup) -> list[RawItem]:
-        """상품 목록 파싱"""
+        """상품 목록 파싱
+
+        2026-05 기준 폴센트 홈은 캐러셀형 추천 상품을 렌더링한다.
+        각 상품은 `<a href="/product/<HASH>/?from=home">` 앵커이며 내부에
+        `<p class="line-clamp-2">` (상품명), `<span>가격원</span>`,
+        `<img alt="...">` (썸네일) 을 포함한다. (구) `div[id=<category>]`
+        구조는 더 이상 존재하지 않는다.
+        """
         items: list[RawItem] = []
 
-        # 폴센트는 카테고리별로 div 컨테이너를 사용 (id=카테고리명)
-        # 카테고리 목록
-        categories = [
-            ("전체", "all"),
-            ("식품", "food"),
-            ("생활용품", "living"),
-            ("가전/디지털", "electronics"),
-            ("뷰티", "beauty"),
-            ("출산/유아", "baby"),
-            ("주방용품", "kitchen"),
-            ("완구/취미", "toys"),
-            ("패션의류", "fashion"),
-            ("패션잡화", "accessories"),
-            ("반려/애완용품", "pet"),
-            ("가구/인테리어", "furniture"),
-            ("스포츠/레저", "sports"),
-            ("자동차용품", "automotive"),
-            ("도서/음반", "books"),
-            ("문구/오피스", "office"),
-        ]
-
-        category_ids = [category_id for category_id, _ in categories]
-        has_category_container = any(
-            soup.find("div", id=category_id) for category_id in category_ids
+        product_links = soup.find_all(
+            "a", href=re.compile(r"^/product/[A-Za-z0-9_-]{6,}/")
         )
-        if not has_category_container:
+        if not product_links:
             logger.warning(
                 "schema_invalid_skip_source",
                 source_id=self.source_id,
                 missing_elements=[
-                    {"element": "category_container", "selector": "div[id=<category>]"}
+                    {
+                        "element": "product_anchor",
+                        "selector": 'a[href^="/product/"]',
+                    }
                 ],
             )
             return []
 
-        # 카테고리별로 상품 수집
-        for korean_name, english_name in categories:
-            category_div = soup.find("div", id=korean_name)
-
-            if not category_div:
+        seen_product_ids: set[str] = set()
+        for link in product_links:
+            try:
+                item = self._parse_single_product(link, self.category)
+            except Exception as e:
+                logger.warning("product_parse_failed", source_id=self.source_id, error=str(e))
                 continue
 
-            # 이 카테고리 div 내의 상품 링크 찾기
-            product_links = category_div.find_all("a", href=re.compile(r"product_id=\d+"))
+            if not item:
+                continue
+            if item.product_id in seen_product_ids:
+                continue
+            if not self.validate_item(item):
+                continue
 
-            for link in product_links:
-                try:
-                    item = self._parse_single_product(link, english_name)
-                    if item and self.validate_item(item):
-                        items.append(item)
-                except Exception as e:
-                    logger.warning("product_parse_failed", source_id=self.source_id, error=str(e))
-                    continue
+            seen_product_ids.add(item.product_id)
+            items.append(item)
 
         logger.info("collection_complete", source_id=self.source_id, count=len(items))
 
         return items
 
     def _parse_single_product(self, link_elem: Tag, category: str = "all") -> RawItem | None:
-        """단일 상품 정보 파싱"""
-        # URL 파싱
+        """단일 상품 정보 파싱
+
+        새 폴센트 스키마 가정:
+          <a href="/product/<HASH>/?from=...">
+            <img alt="<상품명>" src="...">
+            <p ... line-clamp-2 ...>상품명</p>
+            <span ...>가격원</span>   (예: "3,160원")
+          </a>
+        """
         href = link_elem.get("href")
         if not isinstance(href, str) or not href:
             return None
 
         product_url = urljoin(self.base_url, href)
         parsed_url = urlparse(product_url)
-        query_params = parse_qs(parsed_url.query)
 
-        # product_id 추출
-        product_id_list = query_params.get("product_id")
-        if not product_id_list:
+        # /product/<HASH>/ 에서 HASH 추출 → product_id
+        path_match = re.match(r"^/product/([A-Za-z0-9_-]+)/?", parsed_url.path)
+        if not path_match:
             return None
 
-        coupang_product_id = product_id_list[0]
-        product_id = f"fallcent_coupang_{coupang_product_id}"
-
-        # 링크 내부의 모든 텍스트 추출
-        all_text = link_elem.get_text(separator="\n", strip=True)
-        text_lines = [line.strip() for line in all_text.split("\n") if line.strip()]
-
-        # 상품명 추출 (보통 마지막 라인)
-        title = None
-        for line in reversed(text_lines):
-            # 가격이나 할인율이 아닌 라인을 제목으로 간주
-            if not re.search(r"^\d+%?$", line) and not re.search(r"^\d{1,3}(,\d{3})*원?$", line):
-                if len(line) > 10:  # 충분히 긴 텍스트만 제목으로 간주
-                    title = line
-                    break
-
-        if not title:
+        fallcent_hash = path_match.group(1)
+        if fallcent_hash in {"recommend", "search"}:
             return None
+        product_id = f"fallcent_{fallcent_hash}"
 
-        # 가격 정보 추출
-        current_price = None
-        discount_rate = None
+        # 제목 추출: <p class="...line-clamp-2..."> 우선, 그 다음 img[alt]
+        title: str | None = None
+        title_elem = link_elem.find("p", class_=re.compile(r"line-clamp"))
+        if title_elem:
+            title = title_elem.get_text(" ", strip=True) or None
 
-        for line in text_lines:
-            # 가격 패턴 찾기 (예: "28,660원")
-            price_match = re.search(r"(\d{1,3}(?:,\d{3})*)\s*원", line)
-            if price_match and not current_price:
-                current_price = self._parse_price_value(price_match.group(1))
-
-            # 할인율 패턴 찾기 (예: "45%")
-            discount_match = re.search(r"(\d+)\s*%", line)
-            if discount_match and not discount_rate:
-                discount_rate = float(discount_match.group(1)) / 100.0
-
-        # 이미지 URL 추출
         img_elem = link_elem.find("img")
-        image_url = None
+        image_url: str | None = None
         if img_elem:
             img_src = img_elem.get("src")
             if isinstance(img_src, str) and img_src:
                 image_url = urljoin(self.base_url, img_src)
+            if not title:
+                alt_text = img_elem.get("alt")
+                if isinstance(alt_text, str) and alt_text.strip():
+                    title = alt_text.strip()
 
-        # 로켓배송 여부 확인
+        if not title:
+            return None
+
+        # 가격 추출: 앵커 안의 모든 텍스트에서 ", "<숫자>,<숫자>원" 패턴 첫 매치.
+        # NOTE: BaseCollector._parse_price_value 는 콤마를 공백으로 치환 후 첫
+        # 숫자 토큰만 잡으므로 "3,790" 같은 값을 그대로 넘기면 결과가 잘려 나온다.
+        # 그래서 매치 결과의 콤마를 직접 제거한 뒤 호출한다.
+        anchor_text = link_elem.get_text(" ", strip=True)
+        current_price: int | None = None
+        price_match = re.search(r"(\d{1,3}(?:,\d{3})+|\d{3,})\s*원", anchor_text)
+        if price_match:
+            current_price = self._parse_price_value(price_match.group(1).replace(",", ""))
+
+        # 할인율: 앵커 내부 또는 부모 컨테이너 텍스트에서 N% 패턴
+        discount_rate: float | None = None
+        scope_text = anchor_text
+        parent = link_elem.parent
+        if parent:
+            scope_text = parent.get_text(" ", strip=True)
+        discount_match = re.search(r"(\d{1,2})\s*%", scope_text)
+        if discount_match:
+            try:
+                rate = float(discount_match.group(1)) / 100.0
+                if 0.0 < rate <= 1.0:
+                    discount_rate = rate
+            except ValueError:
+                discount_rate = None
+
+        # 로켓 배송 여부 (badge img/svg src or text)
         is_rocket = False
-        rocket_img = link_elem.find("img", src=re.compile(r"rocket.*\.png"))
-        if rocket_img:
-            is_rocket = True
+        for tag in link_elem.find_all("img"):
+            src = tag.get("src") or ""
+            if isinstance(src, str) and re.search(r"rocket|herb", src):
+                is_rocket = True
+                break
 
-        # 최저가 여부 (폴센트 메인은 대부분 최저가)
-        is_lowest_now = "최저가" in str(link_elem.parent) if link_elem.parent else False
+        # 최저가 표기 (앵커 또는 인접 형제 텍스트)
+        is_lowest_now = False
+        if "최저가" in anchor_text:
+            is_lowest_now = True
+        elif parent and "최저가" in parent.get_text(" ", strip=True):
+            is_lowest_now = True
 
-        # RawItem 생성
-        raw_item = RawItem(
+        return RawItem(
             product_id=product_id,
             title=title,
             url=product_url,
@@ -212,17 +218,16 @@ class FallcentCollector(BaseCollector):
             collected_at=datetime.now(tz=UTC),
             current_price=current_price,
             discount_rate=discount_rate,
-            category=category,  # Use the detected category instead of self.category
+            category=category,
             platform="coupang",
             image_url=image_url,
             is_lowest_now=is_lowest_now,
             raw_data={
                 "is_rocket_delivery": is_rocket,
                 "fallcent_url": product_url,
+                "fallcent_hash": fallcent_hash,
             },
         )
-
-        return raw_item
 
 
 class FallcentCategoryCollector(FallcentCollector):

@@ -192,6 +192,8 @@ sources:
      description: "에누리 메인 페이지 - 인기 상품"
 
    # ===== 알구몬 (Algumon) - 실시간 핫딜 큐레이션 =====
+   # 2026-05: SvelteKit SPA 로 재설계되어 /more/* 엔드포인트는 전부 404.
+   # SSR 가용 경로는 /n/deal 한 개뿐이며 lazy-load 카드는 수집 불가.
    - id: algumon_main
      name: "알구몬 메인"
      type: algumon
@@ -203,19 +205,10 @@ sources:
      request_delay: 1.0
      max_items: 120
      list_endpoints:
-       - path: "/more"
+       - path: "/n/deal"
          list_type: latest
-         max_pages: 2
-       - path: "/deal/rank/yesterday/more"
-         list_type: yesterday_rank
-         max_pages: 1
-       - path: "/deal/toomuchlike/10/more"
-         list_type: too_much_like
-         max_pages: 1
-       - path: "/deal/toomuchtalk/50/more"
-         list_type: too_much_talk
-         max_pages: 1
-     description: "알구몬 실시간 핫딜 수집 (최신/어제랭크/추천/댓글)"
+         max_pages: 6
+     description: "알구몬 실시간 핫딜 수집 (/n/deal SSR ?cursor= 페이지네이션, 9건/요청)"
 
    - id: ruliweb_market
      name: "루리웹 장터"
@@ -245,7 +238,7 @@ sources:
    - id: clien_albulgumai
      name: "클리앙 알뜰구매"
      type: clien
-     url: "https://www.clien.net/service/board/park"
+     url: "https://www.clien.net/service/board/jirum"
      enabled: true
      trust_tier: T2_expert
      collector_type: C3_clien
@@ -260,7 +253,8 @@ sources:
      name: "펨코 핫딜"
      type: fmkorea
      url: "https://www.fmkorea.com/hotdeal"
-     enabled: true
+     enabled: false
+     disabled_reason: "robots_txt_block_and_cloudflare_turnstile_2026-05-15 - fmkorea robots.txt explicitly disallows /hotdeal for general bots; no public RSS/sitemap channel exists; re-enable only with official partner API or explicit written consent. See _workspace/2026-05-14_collection_pipeline_check/91_followup_decision_audit.md"
      trust_tier: T2_expert
      collector_type: C3_fmkorea
      category: market
@@ -273,7 +267,7 @@ sources:
    - id: dealbada_main
      name: "딜바다"
      type: dealbada
-     url: "https://www.dealbada.com/hotdeal"
+     url: "https://www.dealbada.com/bbs/board.php?bo_table=deal_domestic"
      enabled: true
      trust_tier: T2_expert
      collector_type: C3_dealbada

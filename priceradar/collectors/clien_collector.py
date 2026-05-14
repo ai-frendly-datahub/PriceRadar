@@ -33,7 +33,7 @@ class ClienCollector(BaseCollector):
     def __init__(self, source_id: str, config: dict[str, Any]) -> None:
         super().__init__(source_id, config)
         self.base_url = "https://www.clien.net"
-        self.board_url = config.get("url", f"{self.base_url}/service/board/park")
+        self.board_url = config.get("url", f"{self.base_url}/service/board/jirum")
         self.user_agent = config.get(
             "user_agent",
             "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
@@ -68,18 +68,29 @@ class ClienCollector(BaseCollector):
                 break
 
             soup = BeautifulSoup(html_content, "html.parser")
+            row_selector = (
+                "div.list_item.symph_row, div.list_item, tr.list_item, "
+                "div[data-role='list-row']"
+            )
+            # jirum board uses <span class="list_subject"><a>...</a></span>
+            # whereas notice rows use <a class="list_subject">.
+            # Either pattern is acceptable as a title-link signal.
+            title_link_selector = (
+                f"{row_selector} a.list_subject, "
+                f"{row_selector} span.list_subject a"
+            )
             if not self._validate_html_schema(
                 soup,
                 {
-                    "post_row": "tr.list_item",
-                    "post_title_link": "tr.list_item a.list_subject",
+                    "post_row": row_selector,
+                    "post_title_link": title_link_selector,
                 },
                 context=page_url,
             ):
                 logger.warning("schema_invalid_skip_source", source_id=self.source_id, url=page_url)
                 break
 
-            post_elements = soup.select("tr.list_item")
+            post_elements = soup.select(row_selector)
 
             if not post_elements:
                 break
@@ -131,11 +142,28 @@ class ClienCollector(BaseCollector):
 
     def _parse_post(self, post_elem: Tag) -> RawItem | None:
         """게시물 요소에서 상품 정보 추출"""
-        title_elem = post_elem.select_one("a.list_subject")
+        # Skip notice/공지 rows so notice noise doesn't pollute deal output.
+        post_classes = post_elem.get("class") or []
+        if isinstance(post_classes, str):
+            post_classes = post_classes.split()
+        if "notice" in post_classes:
+            return None
+
+        # Notice rows: <a class="list_subject">. Real jirum rows: <span class="list_subject"><a>.
+        title_elem = post_elem.select_one("a.list_subject, span.list_subject a")
         if not title_elem:
             return None
 
-        title = title_elem.get_text(strip=True)
+        # Prefer the actual title text (in symph_row, the wrapping span carries
+        # the canonical title in its `title` attribute when truncated).
+        wrapper_span = post_elem.select_one("span.list_subject")
+        title = ""
+        if wrapper_span is not None:
+            span_title_attr = wrapper_span.get("title")
+            if isinstance(span_title_attr, str) and span_title_attr.strip():
+                title = span_title_attr.strip()
+        if not title:
+            title = title_elem.get_text(strip=True)
         if not title:
             return None
 

@@ -61,6 +61,7 @@ dmypy.json
 # Note: docs/reports/ is tracked for GitHub Pages
 # data/priceradar.duckdb is tracked for historical data
 *.duckdb.wal
+*.duckdb.wal.broken-*
 data/search_index.db*
 analyze_*.py
 test_*.py
@@ -69,6 +70,7 @@ test_*.py
 !tests/unit/test_date_storage.py
 !tests/unit/test_price_contract_fields.py
 !tests/unit/test_anomaly.py
+!tests/unit/test_base_collector_price_parse.py
 debug_*.py
 check_db.py
 find_*.py

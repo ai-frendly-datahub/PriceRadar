@@ -52,13 +52,15 @@ def build_quality_report(
     official_backlog = list(data_quality.get("official_source_backlog") or [])
     quality_gates = _quality_gates(data_quality, enabled_status, official_backlog)
     tracked_event_models = _tracked_event_models(data_quality)
+    deal_rows_list = list(deal_rows or [])
     events = _build_event_rows(
-        deal_rows=deal_rows or [],
+        deal_rows=deal_rows_list,
         source_status=source_status,
         tracked_event_models=tracked_event_models,
     )
     event_counts = _count_events(events)
     daily_review_items = _daily_review_items(events, enabled_status, official_backlog)
+    current_price_null_by_source = _count_current_price_nulls(deal_rows_list)
 
     summary = {
         "priority": data_quality.get("priority", "P1"),
@@ -105,6 +107,10 @@ def build_quality_report(
             for event in events
             if event.get("event_model") == "sku_price_snapshot" and event.get("outlier_flag")
         ),
+        "current_price_null_total": sum(
+            stats["null"] for stats in current_price_null_by_source.values()
+        ),
+        "current_price_null_by_source": current_price_null_by_source,
         "missing_required_components": [
             gate["name"] for gate in quality_gates if gate["status"] == "attention"
         ],
@@ -200,6 +206,27 @@ def _build_event_rows(
         ).strip():
             events.append(_event_row(deal, source, "stock_status_transition"))
     return events
+
+
+def _count_current_price_nulls(
+    deal_rows: Iterable[Mapping[str, Any]],
+) -> dict[str, dict[str, int]]:
+    """Per-source counts of deals missing ``current_price``.
+
+    Returned shape: ``{source_id: {"total": N, "null": K, "null_pct": float}}``.
+    Sources that never appear in the deal stream are omitted.
+    """
+    counts: dict[str, dict[str, int]] = {}
+    for deal in deal_rows:
+        source_id = str(deal.get("source") or deal.get("platform") or "unknown")
+        bucket = counts.setdefault(source_id, {"total": 0, "null": 0})
+        bucket["total"] += 1
+        if _as_int(deal.get("current_price")) is None:
+            bucket["null"] += 1
+    for bucket in counts.values():
+        total = max(bucket["total"], 1)
+        bucket["null_pct"] = round(100.0 * bucket["null"] / total, 2)
+    return counts
 
 
 def _event_models_for_source(

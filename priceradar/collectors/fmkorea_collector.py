@@ -50,7 +50,7 @@ class FmkoreaCollector(BaseCollector):
                 "User-Agent": self.user_agent,
                 "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
                 "Accept-Language": "ko-KR,ko;q=0.9,en;q=0.8",
-                "Accept-Encoding": "gzip, deflate, br",
+                "Accept-Encoding": "gzip, deflate",
                 "Connection": "keep-alive",
                 "Referer": self.base_url,
             }
@@ -81,18 +81,23 @@ class FmkoreaCollector(BaseCollector):
                 break
 
             soup = BeautifulSoup(html_content, "html.parser")
+            row_selector = (
+                "li[class*='li_best2_hotdeal'], li.li_best2_hotdeal0, "
+                "div.post-item, tr.list-item"
+            )
+            title_selector = "h3.title a, a.hotdeal_var8, a.post-title, a.subject"
             if not self._validate_html_schema(
                 soup,
                 {
-                    "post_row": "div.post-item, tr.list-item",
-                    "post_title_link": "a.post-title, a.subject",
+                    "post_row": row_selector,
+                    "post_title_link": title_selector,
                 },
                 context=page_url,
             ):
                 logger.warning("schema_invalid_skip_source", source_id=self.source_id, url=page_url)
                 break
 
-            post_elements = soup.select("div.post-item, tr.list-item")
+            post_elements = soup.select(row_selector)
 
             if not post_elements:
                 break
@@ -142,7 +147,9 @@ class FmkoreaCollector(BaseCollector):
 
     def _parse_post(self, post_elem: Tag) -> RawItem | None:
         """게시물 요소에서 상품 정보 추출"""
-        title_elem = post_elem.select_one("a.post-title, a.subject")
+        title_elem = post_elem.select_one(
+            "h3.title a, a.hotdeal_var8, a.post-title, a.subject"
+        )
         if not title_elem:
             return None
 

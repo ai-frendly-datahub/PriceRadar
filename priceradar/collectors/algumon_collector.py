@@ -31,6 +31,16 @@ class AlgumonCollector(BaseCollector):
         self.list_endpoints = self._normalize_list_endpoints(config.get("list_endpoints"))
 
     def collect(self) -> list[RawItem]:
+        """알구몬 핫딜 SSR 페이지에서 카드 정보를 수집한다.
+
+        2026-05 기준 알구몬은 SvelteKit SPA 로 재설계되어 기존 `/more/<page>`
+        엔드포인트들은 모두 404 를 반환한다. 현재 SSR 가용 경로는 `/n/deal`
+        한 개이며 한 요청에 9개 카드가 노출된다. `?cursor=<deal_id>` 쿼리로
+        해당 deal_id 직전 9개를 받아오는 방식으로 페이지네이션할 수 있다.
+
+        max_pages 만큼 cursor 를 따라 내려가며 max_items 까지 수집한다.
+        max_items 이전에 카드가 더 안 나오면 멈춘다.
+        """
         items: list[RawItem] = []
         seen_ids: set[str] = set()
         request_count = 0
@@ -38,10 +48,14 @@ class AlgumonCollector(BaseCollector):
         for endpoint in self.list_endpoints:
             path = endpoint["path"]
             list_type = endpoint["list_type"]
-            max_pages = endpoint["max_pages"]
+            max_pages = int(endpoint.get("max_pages", 1))
+            cursor: str | None = None
 
-            for page in range(max_pages):
-                page_url = self._build_more_url(path, page)
+            for _page_idx in range(max(1, max_pages)):
+                page_url = urljoin(self.base_url, path)
+                if cursor:
+                    sep = "&" if "?" in page_url else "?"
+                    page_url = f"{page_url}{sep}cursor={cursor}"
 
                 if request_count > 0 and self.request_delay > 0:
                     time.sleep(self.request_delay)
@@ -65,8 +79,8 @@ class AlgumonCollector(BaseCollector):
                 if not self._validate_html_schema(
                     soup,
                     {
-                        "post_item": "li.post-li",
-                        "product_link": "li.post-li a[href]",
+                        "deal_card": "div.deal-feed-card",
+                        "deal_card_title": "div.deal-feed-card h3 a",
                     },
                     context=page_url,
                 ):
@@ -77,10 +91,12 @@ class AlgumonCollector(BaseCollector):
                     )
                     break
 
-                product_elements = soup.select("li.post-li")
+                product_elements = soup.select("div.deal-feed-card")
                 if not product_elements:
                     break
 
+                new_in_page = 0
+                lowest_deal_id: int | None = None
                 for product_elem in product_elements:
                     item = self._parse_product(product_elem, list_type=list_type)
                     if not item:
@@ -92,6 +108,13 @@ class AlgumonCollector(BaseCollector):
 
                     seen_ids.add(item.product_id)
                     items.append(item)
+                    new_in_page += 1
+
+                    deal_id_raw = item.raw_data.get("deal_id")
+                    if deal_id_raw and str(deal_id_raw).isdigit():
+                        deal_int = int(deal_id_raw)
+                        if lowest_deal_id is None or deal_int < lowest_deal_id:
+                            lowest_deal_id = deal_int
 
                     if len(items) >= self.max_items:
                         logger.info(
@@ -100,6 +123,10 @@ class AlgumonCollector(BaseCollector):
                             max_items=self.max_items,
                         )
                         return items
+
+                if new_in_page == 0 or lowest_deal_id is None:
+                    break
+                cursor = str(lowest_deal_id)
 
         logger.info("collection_complete", source_id=self.source_id, count=len(items))
         return items
@@ -125,52 +152,89 @@ class AlgumonCollector(BaseCollector):
             raise
 
     def _parse_product(self, product_elem: Tag, list_type: str = "latest") -> RawItem | None:
-        detail_link_elem = product_elem.select_one("a.deal-detail-icon[href]")
-        detail_href = str(detail_link_elem.get("href", "")).strip() if detail_link_elem else ""
-        detail_url = urljoin(self.base_url, detail_href) if detail_href else None
+        """알구몬 deal-feed-card 한 장을 RawItem 으로 변환.
 
-        product_link_elem = product_elem.select_one("a.product-link[href]")
-        if not product_link_elem:
-            product_link_elem = product_elem.select_one("a.product-thumbnail-link[href]")
+        새 스키마 가정:
+          <div class="deal-feed-card" id="deal-<DEAL_ID>">
+            <h3 ...><a href="https://www.algumon.com/l/d/<DEAL_ID>?...">제목</a></h3>
+            <img src="..." alt="제목">
+            <p class="deal-price-text">8,910원 (12 x 742원)</p>
+            <a class="badge ..." href="/n/deal?keyword=쿠팡">쿠팡</a>
+            ...
+        """
+        # 외부 상품 링크 (h3 a) 와 알구몬 내부 상세 링크 (/n/deal/<id>) 모두 확인
+        title_anchor = product_elem.select_one("h3 a[href]")
+        detail_anchor = product_elem.select_one(f'a[href^="{self.base_url}/l/d/"]')
+        if title_anchor is None:
+            title_anchor = detail_anchor
 
-        product_href = str(product_link_elem.get("href", "")).strip() if product_link_elem else ""
-        if not product_href:
-            product_href = detail_href
-
-        if not product_href:
+        if title_anchor is None:
             return None
 
-        product_url = urljoin(self.base_url, product_href)
-
-        title = product_link_elem.get_text(strip=True) if product_link_elem else ""
-        if not title:
-            title_elem = product_elem.select_one(".deal-title")
-            title = title_elem.get_text(" ", strip=True) if title_elem else ""
-
-        if not title:
+        title_href = str(title_anchor.get("href", "")).strip()
+        if not title_href:
             return None
 
-        deal_id = self._extract_deal_id(detail_href) or self._extract_deal_id(product_href)
+        # deal_id 추출: card id 우선 (예: id="deal-976827"), 그 다음 href 패턴
+        card_id = str(product_elem.get("id", "")).strip()
+        deal_id: str | None = None
+        card_match = re.match(r"^deal-(\d+)$", card_id)
+        if card_match:
+            deal_id = card_match.group(1)
+        if not deal_id:
+            deal_id = self._extract_deal_id(title_href)
+
+        product_url = title_href
+        if not product_url.startswith("http"):
+            product_url = urljoin(self.base_url, product_url)
+
         product_id = (
             f"algumon_deal_{deal_id}" if deal_id else self._generate_product_id(product_url)
         )
 
-        price_text = self._extract_text(product_elem.select_one(".deal-price-info .product-price"))
-        if not price_text:
-            price_text = self._extract_text(product_elem.select_one(".deal-price-text"))
-        current_price = self._parse_price(price_text)
+        title = title_anchor.get_text(" ", strip=True)
+        if not title:
+            return None
 
-        title_text = self._extract_text(product_elem.select_one(".deal-title")) or title
-        price_meta_text = self._extract_text(product_elem.select_one(".deal-price-meta-info"))
-        discount_rate = self._parse_discount_rate(title_text, price_meta_text)
+        # 가격: .deal-price-text 우선. 텍스트는 "8,910원 (12 x 742원)" 같은
+        # 복합 형식이라 BaseCollector._parse_price_value 가 콤마를 공백으로
+        # 바꾼 뒤 첫 토큰만 잡으면 "8" 처럼 잘려 나온다. 천단위 콤마를 포함한
+        # 첫 가격 토큰을 직접 매칭해 콤마 제거 후 helper 에 넘긴다.
+        price_text = self._extract_text(product_elem.select_one(".deal-price-text"))
+        current_price: int | None = None
+        if price_text:
+            primary_match = re.search(r"(\d{1,3}(?:,\d{3})+|\d{3,})\s*원", price_text)
+            if primary_match:
+                current_price = self._parse_price(primary_match.group(1).replace(",", ""))
+        if current_price is None:
+            current_price = self._parse_price(price_text)
+
+        discount_rate = self._parse_discount_rate(title, price_text)
 
         image_url = None
-        image_elem = product_elem.select_one(".product-img img")
-        if image_elem and image_elem.get("src"):
-            image_url = urljoin(self.base_url, str(image_elem.get("src")))
+        image_elem = product_elem.find("img")
+        if image_elem is not None:
+            img_src = image_elem.get("src")
+            if isinstance(img_src, str) and img_src:
+                image_url = urljoin(self.base_url, img_src)
 
-        shop_name = self._extract_text(product_elem.select_one(".label.shop a"))
-        community = self._extract_text(product_elem.select_one(".label.site"))
+        # 쇼핑몰 라벨: 첫 번째 badge 링크 (keyword= 쿼리 포함)
+        shop_name: str | None = None
+        for badge in product_elem.select(
+            'a.badge[href*="keyword="], span.badge'
+        ):
+            text = badge.get_text(" ", strip=True)
+            if text:
+                shop_name = text
+                break
+
+        # detail_url: 알구몬 내부 상세 페이지 (있을 때만)
+        detail_url = None
+        internal_anchor = product_elem.select_one('a[href^="/n/deal/"]')
+        if internal_anchor is not None:
+            internal_href = str(internal_anchor.get("href", "")).strip()
+            if internal_href:
+                detail_url = urljoin(self.base_url, internal_href)
 
         return RawItem(
             product_id=product_id,
@@ -187,27 +251,30 @@ class AlgumonCollector(BaseCollector):
             is_popular=list_type != "latest",
             raw_data={
                 "deal_id": deal_id,
-                "post_id": product_elem.get("data-post-id"),
                 "list_type": list_type,
                 "shop_name": shop_name,
-                "community": community,
                 "detail_url": detail_url,
                 "price_text": price_text,
-                "data_action_uri": product_elem.get("data-action-uri"),
+                "card_id": card_id,
             },
         )
 
     def _normalize_list_endpoints(self, raw_endpoints: Any) -> list[dict[str, Any]]:
+        """알구몬 SvelteKit SPA 의 SSR 진입점만 허용.
+
+        과거 `/more`, `/deal/rank/yesterday/more`, `/deal/toomuchlike/...`
+        등은 2026-05 현재 모두 404 다. 현재 살아 있는 페이지는 `/n/deal`
+        한 개이며 `?cursor=<deal_id>` 로 페이지를 거슬러 올라간다.
+        """
         default_endpoints: list[dict[str, Any]] = [
-            {"path": "/more", "list_type": "latest", "max_pages": 2},
-            {"path": "/deal/rank/yesterday/more", "list_type": "yesterday_rank", "max_pages": 1},
-            {"path": "/deal/toomuchlike/10/more", "list_type": "too_much_like", "max_pages": 1},
-            {"path": "/deal/toomuchtalk/50/more", "list_type": "too_much_talk", "max_pages": 1},
+            {"path": "/n/deal", "list_type": "latest", "max_pages": 4},
         ]
 
         if not isinstance(raw_endpoints, list):
             return default_endpoints
 
+        # 죽은 경로는 무시하고 살아 있는 SSR 경로만 통과시킨다.
+        live_paths = {"/n/deal", "/n/deal/"}
         normalized: list[dict[str, Any]] = []
         for endpoint in raw_endpoints:
             if not isinstance(endpoint, dict):
@@ -218,6 +285,10 @@ class AlgumonCollector(BaseCollector):
                 continue
             if not path.startswith("/"):
                 path = f"/{path}"
+
+            if path not in live_paths:
+                # config 에 옛 엔드포인트가 남아 있어도 무시 (회귀 방지)
+                continue
 
             try:
                 max_pages = int(endpoint.get("max_pages", 1))
@@ -231,12 +302,11 @@ class AlgumonCollector(BaseCollector):
 
         return normalized or default_endpoints
 
-    def _build_more_url(self, path: str, page: int) -> str:
-        normalized_path = path.rstrip("/")
-        return f"{self.base_url}{normalized_path}/{page}"
-
     def _extract_deal_id(self, url: str) -> str | None:
-        patterns = [r"/m/deal/(\d+)", r"/l/d/(\d+)"]
+        # 알구몬 외부 상품 링크: https://www.algumon.com/l/d/<DEAL_ID>?...
+        # 내부 상세 링크: /n/deal/<DEAL_ID>
+        # 구) /m/deal/<DEAL_ID> 도 유지
+        patterns = [r"/m/deal/(\d+)", r"/l/d/(\d+)", r"/n/deal/(\d+)"]
         for pattern in patterns:
             matched = re.search(pattern, url)
             if matched:
