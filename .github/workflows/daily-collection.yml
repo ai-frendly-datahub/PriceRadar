@@ -85,7 +85,7 @@ jobs:
       run: |
         git config --local user.email "action@github.com"
         git config --local user.name "GitHub Action"
-        git add -f data/ reports/ 2>/dev/null || true
+        git add -f data/ reports/ ':(exclude)data/search_index.db*' 2>/dev/null || true
         git diff --quiet && git diff --staged --quiet || (git commit -m "Daily collection: $(date +'%Y-%m-%d')" && git push)
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
