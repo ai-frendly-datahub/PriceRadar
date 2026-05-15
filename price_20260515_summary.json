@@ -1,5 +1,5 @@
 {
-  "date": "2026-05-14",
+  "date": "2026-05-15",
   "category": "price",
   "article_count": 100,
   "source_count": 4,
@@ -11,11 +11,11 @@
     },
     {
       "name": "source:enuri_main",
-      "count": 61
+      "count": 60
     },
     {
       "name": "discount:50%+",
-      "count": 43
+      "count": 44
     },
     {
       "name": "platform:coupang",
@@ -27,14 +27,14 @@
     },
     {
       "name": "discount:30%+",
-      "count": 23
-    },
-    {
-      "name": "source:fallcent_electronics",
-      "count": 18
+      "count": 22
     },
     {
       "name": "category:electronics",
+      "count": 19
+    },
+    {
+      "name": "source:fallcent_electronics",
       "count": 18
     },
     {
@@ -43,26 +43,26 @@
     },
     {
       "name": "price_band:200k_plus",
-      "count": 14
+      "count": 13
     },
     {
       "name": "source:fallcent_main",
       "count": 13
     },
     {
+      "name": "price_band:under_10k",
+      "count": 12
+    },
+    {
       "name": "platform:elevenst",
       "count": 12
     },
     {
-      "name": "price_band:under_10k",
-      "count": 11
-    },
-    {
-      "name": "brand:LG전자",
+      "name": "source:algumon_main",
       "count": 9
     },
     {
-      "name": "source:algumon_main",
+      "name": "brand:LG전자",
       "count": 8
     },
     {
@@ -88,9 +88,9 @@
   ],
   "sources": {
     "fallcent_electronics": 18,
-    "enuri_main": 61,
+    "enuri_main": 60,
     "fallcent_main": 13,
-    "algumon_main": 8
+    "algumon_main": 9
   },
-  "generated_at": "2026-05-14T11:11:58.775157+00:00"
+  "generated_at": "2026-05-15T19:14:05.958215+09:00"
 }
