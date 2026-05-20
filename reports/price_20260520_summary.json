@@ -1,0 +1,96 @@
+{
+  "date": "2026-05-20",
+  "category": "price",
+  "article_count": 100,
+  "source_count": 4,
+  "matched_count": 100,
+  "top_entities": [
+    {
+      "name": "price_band:10k_50k",
+      "count": 61
+    },
+    {
+      "name": "source:enuri_main",
+      "count": 60
+    },
+    {
+      "name": "discount:50%+",
+      "count": 44
+    },
+    {
+      "name": "platform:coupang",
+      "count": 30
+    },
+    {
+      "name": "discount:70%+",
+      "count": 27
+    },
+    {
+      "name": "discount:30%+",
+      "count": 22
+    },
+    {
+      "name": "category:electronics",
+      "count": 20
+    },
+    {
+      "name": "source:fallcent_electronics",
+      "count": 18
+    },
+    {
+      "name": "platform:gmarket",
+      "count": 16
+    },
+    {
+      "name": "price_band:under_10k",
+      "count": 13
+    },
+    {
+      "name": "price_band:200k_plus",
+      "count": 13
+    },
+    {
+      "name": "platform:elevenst",
+      "count": 12
+    },
+    {
+      "name": "source:fallcent_main",
+      "count": 12
+    },
+    {
+      "name": "source:algumon_main",
+      "count": 10
+    },
+    {
+      "name": "brand:LG전자",
+      "count": 8
+    },
+    {
+      "name": "discount:discounted",
+      "count": 7
+    },
+    {
+      "name": "brand:삼성전자",
+      "count": 6
+    },
+    {
+      "name": "category:fashion",
+      "count": 6
+    },
+    {
+      "name": "price_band:50k_200k",
+      "count": 5
+    },
+    {
+      "name": "brand:불스원",
+      "count": 5
+    }
+  ],
+  "sources": {
+    "fallcent_electronics": 18,
+    "enuri_main": 60,
+    "fallcent_main": 12,
+    "algumon_main": 10
+  },
+  "generated_at": "2026-05-20T19:43:42.388972+09:00"
+}
