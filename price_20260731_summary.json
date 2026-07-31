@@ -1,5 +1,5 @@
 {
-  "date": "2026-07-30",
+  "date": "2026-07-31",
   "category": "price",
   "article_count": 100,
   "source_count": 4,
@@ -7,7 +7,7 @@
   "top_entities": [
     {
       "name": "price_band:10k_50k",
-      "count": 60
+      "count": 61
     },
     {
       "name": "source:enuri_main",
@@ -15,7 +15,7 @@
     },
     {
       "name": "discount:50%+",
-      "count": 43
+      "count": 44
     },
     {
       "name": "platform:coupang",
@@ -31,7 +31,7 @@
     },
     {
       "name": "discount:30%+",
-      "count": 21
+      "count": 20
     },
     {
       "name": "source:fallcent_electronics",
@@ -39,7 +39,7 @@
     },
     {
       "name": "platform:gmarket",
-      "count": 15
+      "count": 16
     },
     {
       "name": "price_band:under_10k",
@@ -78,11 +78,11 @@
       "count": 6
     },
     {
-      "name": "price_band:50k_200k",
+      "name": "brand:불스원",
       "count": 5
     },
     {
-      "name": "brand:불스원",
+      "name": "brand:아모레퍼시픽",
       "count": 4
     }
   ],
@@ -92,5 +92,5 @@
     "fallcent_main": 12,
     "algumon_main": 12
   },
-  "generated_at": "2026-07-30T19:15:08.732751+09:00"
+  "generated_at": "2026-07-31T19:32:05.562583+09:00"
 }
