@@ -138,6 +138,7 @@ markers = [
 
 # Coverage configuration
 [tool.coverage.run]
+relative_files = true
 source = ["."]
 omit = [
     "*/tests/*",
