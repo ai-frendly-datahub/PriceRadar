@@ -18,16 +18,20 @@ from pybreaker import CircuitBreakerError
 from requests.adapters import HTTPAdapter
 from urllib3.util.retry import Retry
 
+from .collection_contract import (
+    PRICERADAR_USER_AGENT,
+    REQUEST_TIMEOUT_SECONDS,
+    is_challenge_or_error_page,
+)
 from .exceptions import NetworkError, ParseError, SourceError
 from .models import Article, Source
 from .resilience import get_circuit_breaker_manager
-
 
 logger = structlog.get_logger()
 
 
 _DEFAULT_HEADERS: dict[str, str] = {
-    "User-Agent": "Mozilla/5.0 (compatible; RadarTemplateBot/1.0; +https://github.com/zzragida/ai-frendly-datahub)",
+    "User-Agent": PRICERADAR_USER_AGENT,
 }
 _DEFAULT_HEALTH_DB_PATH = "data/radar_data.duckdb"
 _COLLECTION_CONTROL_LOCK = threading.Lock()
@@ -101,6 +105,8 @@ def _create_session() -> requests.Session:
     adapter = HTTPAdapter(max_retries=retry_strategy)
     session.mount("http://", adapter)
     session.mount("https://", adapter)
+    session.headers["User-Agent"] = PRICERADAR_USER_AGENT
+    session.verify = True
 
     return session
 
@@ -117,6 +123,7 @@ def _fetch_url_with_retry(
 ) -> requests.Response:
     """Fetch URL with retry logic on transient errors."""
     merged = {**_DEFAULT_HEADERS, **(headers or {})}
+    merged["User-Agent"] = PRICERADAR_USER_AGENT
     if throttler is None or health_store is None:
         active_throttler, active_health_store = _get_collection_controls()
         throttler = throttler or active_throttler
@@ -134,9 +141,9 @@ def _fetch_url_with_retry(
 
         try:
             if session is not None:
-                response = session.get(url, timeout=timeout, headers=merged)
+                response = session.get(url, timeout=timeout, headers=merged, verify=True)
             else:
-                response = requests.get(url, timeout=timeout, headers=merged)
+                response = requests.get(url, timeout=timeout, headers=merged, verify=True)
             response.raise_for_status()
 
             if source_name is not None and throttler is not None:
@@ -184,7 +191,7 @@ def collect_sources(
     *,
     category: str,
     limit_per_source: int = 30,
-    timeout: int = 15,
+    timeout: int = REQUEST_TIMEOUT_SECONDS,
     min_interval_per_host: float = 0.5,
     max_workers: int | None = None,
     health_db_path: str | None = None,
@@ -318,6 +325,12 @@ def _collect_single(
 
     try:
         feed = feedparser.parse(response.content)
+        feed_meta = getattr(feed, "feed", {}) or {}
+        feed_title = str(feed_meta.get("title") or "") if isinstance(feed_meta, Mapping) else ""
+        preview = response.text[:4000] if isinstance(getattr(response, "text", None), str) else ""
+        if is_challenge_or_error_page(feed_title, preview):
+            return []
+
         items: list[Article] = []
 
         for entry in feed.entries[:limit]:
@@ -332,11 +345,15 @@ def _collect_single(
                         if isinstance(value, str):
                             summary = value
 
+            title = html.unescape(_entry_text(entry, "title").strip()) or "(no title)"
+            summary_text = html.unescape(summary.strip())
+            if is_challenge_or_error_page(title, summary_text):
+                continue
             items.append(
                 Article(
-                    title=html.unescape(_entry_text(entry, "title").strip()) or "(no title)",
+                    title=title,
                     link=_entry_text(entry, "link").strip(),
-                    summary=html.unescape(summary.strip()),
+                    summary=summary_text,
                     published=published,
                     source=source.name,
                     category=category,

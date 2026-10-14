@@ -17,11 +17,11 @@ from datetime import UTC, datetime
 from typing import Any
 from urllib.parse import parse_qsl, urlencode, urljoin, urlparse, urlunparse
 
-import requests
 import structlog
 from bs4 import BeautifulSoup, Tag
 from tenacity import retry, stop_after_attempt, wait_exponential
 
+from priceradar.collection_contract import PRICERADAR_USER_AGENT
 from priceradar.collectors.base import BaseCollector, RawItem
 
 logger = structlog.get_logger(__name__)
@@ -37,10 +37,7 @@ class DealbadaCollector(BaseCollector):
             "url",
             f"{self.base_url}/bbs/board.php?bo_table=deal_domestic",
         )
-        self.user_agent = config.get(
-            "user_agent",
-            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
-        )
+        self.user_agent = PRICERADAR_USER_AGENT
         # Page 5 of the domestic board often answers just under or over 30s
         # (2026-10-13: two read timeouts, then a ~29s success). 45s avoids
         # burning the retry budget on a page that is slow rather than down.
@@ -151,7 +148,7 @@ class DealbadaCollector(BaseCollector):
         }
 
         try:
-            response = requests.get(url, headers=headers, timeout=self.timeout)
+            response = self.http_get(url, headers=headers, timeout=self.timeout)
             response.raise_for_status()
             response.encoding = "utf-8"
             return response.text

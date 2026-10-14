@@ -7,13 +7,12 @@ from datetime import UTC, datetime
 from typing import Any
 from urllib.parse import urljoin, urlparse
 
-import requests
 import structlog
 from bs4 import BeautifulSoup, Tag
 from tenacity import retry, stop_after_attempt, wait_exponential
 
+from priceradar.collection_contract import PRICERADAR_USER_AGENT, REQUEST_TIMEOUT_SECONDS
 from priceradar.collectors.base import BaseCollector, RawItem
-
 
 logger = structlog.get_logger(__name__)
 
@@ -23,8 +22,8 @@ class AlgumonCollector(BaseCollector):
         super().__init__(source_id, config)
         self.base_url = "https://www.algumon.com"
         self.url = config.get("url", f"{self.base_url}/")
-        self.user_agent = config.get("user_agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64)")
-        self.timeout = int(config.get("timeout", 30))
+        self.user_agent = PRICERADAR_USER_AGENT
+        self.timeout = int(config.get("timeout", REQUEST_TIMEOUT_SECONDS))
         self.category = config.get("category", "electronics")
         self.request_delay = float(config.get("request_delay", 1.0))
         self.max_items = int(config.get("max_items", 120))
@@ -143,7 +142,7 @@ class AlgumonCollector(BaseCollector):
         }
 
         try:
-            response = requests.get(url, headers=headers, timeout=self.timeout)
+            response = self.http_get(url, headers=headers, timeout=self.timeout)
             response.raise_for_status()
             response.encoding = "utf-8"
             return response.text
@@ -220,9 +219,7 @@ class AlgumonCollector(BaseCollector):
 
         # 쇼핑몰 라벨: 첫 번째 badge 링크 (keyword= 쿼리 포함)
         shop_name: str | None = None
-        for badge in product_elem.select(
-            'a.badge[href*="keyword="], span.badge'
-        ):
+        for badge in product_elem.select('a.badge[href*="keyword="], span.badge'):
             text = badge.get_text(" ", strip=True)
             if text:
                 shop_name = text

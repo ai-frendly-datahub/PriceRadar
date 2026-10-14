@@ -20,10 +20,22 @@ from typing import Any
 import yaml
 
 from priceradar.analyzers.price_scorer import PriceScorer
+from priceradar.collection_contract import (
+    EmptyCollectionError,
+    EmptyOutputError,
+    OversizedDatabaseError,
+    emit_missing_secret_warning,
+    ensure_collection_not_empty,
+    ensure_database_within_limit,
+    ensure_nonempty_files,
+    is_challenge_or_error_page,
+    missing_required_env,
+)
 from priceradar.collectors.base import RawItem
 from priceradar.collectors.registry import CollectorRegistry
 from priceradar.config import load_notification_config
 from priceradar.date_storage import apply_date_storage_policy
+from priceradar.exceptions import ChallengePageError
 from priceradar.graph.graph_store import GraphStore
 from priceradar.models import Article, CategoryConfig
 from priceradar.notifier import PipelineNotifier, detect_price_notifications
@@ -68,7 +80,7 @@ def run_collection(
     config: dict[str, Any],
     sources_config: dict[str, Any],
     notifier: PipelineNotifier | None = None,
-) -> None:
+) -> dict[str, Any]:
     """데이터 수집 실행"""
     print("\n=== 데이터 수집 시작 ===")
     start_time = time.time()
@@ -80,6 +92,8 @@ def run_collection(
 
     total_items_collected = 0
     total_items_saved = 0
+    enabled_source_count = 0
+    source_counts: dict[str, int] = {}
     sources = sources_config.get("sources", [])
 
     # 중복 제거를 위한 URL 세트 (메모리 내)
@@ -89,16 +103,30 @@ def run_collection(
         if not source.get("enabled", False):
             continue
 
-        source_id = source.get("id")
+        source_id = str(source.get("id") or source.get("name") or "unknown")
+        enabled_source_count += 1
+        missing_env = missing_required_env(source)
+        if missing_env:
+            emit_missing_secret_warning(source_id, missing_env)
+            raw_logger.log_skip(source_name=source_id, required_env=missing_env)
+            source_counts[source_id] = 0
+            print(f"\n[{source_id}] skipped; required env {', '.join(missing_env)}")
+            continue
+
         print(f"\n[{source_id}] 수집 중...")
 
         try:
             # 수집기 생성
             collector = CollectorRegistry.create_collector(source)
 
-            # 데이터 수집
-            items = collector.collect()
+            # 데이터 수집. 챌린지/쿠키월 문서는 저장하지 않는다.
+            items = [
+                item
+                for item in collector.collect()
+                if not is_challenge_or_error_page(item.title, item.title)
+            ]
             total_items_collected += len(items)
+            source_counts[source_id] = len(items)
 
             validated_items: list[RawItem] = []
             for item in items:
@@ -150,7 +178,12 @@ def run_collection(
 
             print(f"[{source_id}] {len(validated_items)}개 아이템 수집 완료")
 
+        except ChallengePageError as e:
+            source_counts[source_id] = 0
+            print(f"[{source_id}] 챌린지 페이지라 건너뜀: {e}")
+            continue
         except Exception as e:
+            source_counts.setdefault(source_id, 0)
             print(f"[{source_id}] 수집 실패: {e}")
             continue
 
@@ -160,6 +193,18 @@ def run_collection(
     duplicates_removed = total_items_collected - total_items_saved
     print(f"\n수집 완료: 총 {total_items_collected}개 아이템 ({elapsed:.2f}초)")
     print(f"중복 제거: {duplicates_removed}개 (저장: {total_items_saved}개)")
+    for source_id, count in source_counts.items():
+        print(f"  - {source_id}: {count}")
+    ensure_collection_not_empty(
+        collected_count=total_items_collected,
+        enabled_source_count=enabled_source_count,
+    )
+    return {
+        "enabled_source_count": enabled_source_count,
+        "collected": total_items_collected,
+        "saved": total_items_saved,
+        "sources": source_counts,
+    }
 
 
 def _raw_item_to_article(item: RawItem) -> Article:
@@ -540,10 +585,25 @@ def run_once(
             f"compacted={date_storage.get('db_compacted')} "
             f"reason={date_storage.get('db_reason')} "
             f"bytes={date_storage.get('db_bytes_before')} -> {date_storage.get('db_bytes')} "
-            f"rows_deleted={date_storage.get('db_rows_deleted')}"
+            f"rows_deleted={date_storage.get('db_rows_deleted')} "
+            f"scores_removed={date_storage.get('scores_removed')} "
+            f"rows_backfilled={date_storage.get('rows_backfilled')}"
         )
     except Exception as e:
         print(f"Date storage policy failed: {e}")
+
+    database_path = Path(config["database"]["path"])
+    ensure_database_within_limit(database_path)
+    report_dir = Path(config.get("reporting", {}).get("output_path", "reports"))
+    if generate_report_flag and report_dir.exists():
+        produced = [
+            path
+            for path in report_dir.iterdir()
+            if path.is_file() and path.suffix in {".html", ".json"} and "price_" in path.name
+        ]
+        ensure_nonempty_files(produced)
+        for snapshot in database_path.parent.rglob("*.duckdb"):
+            ensure_database_within_limit(snapshot)
 
     # 6. 통계 출력
     db_path = config["database"]["path"]
@@ -653,28 +713,35 @@ def main() -> None:
     notifier = PipelineNotifier(notification_config)
 
     # 모드별 실행
-    if args.mode == "once":
-        run_once(
-            config,
-            sources_config,
-            generate_report_flag=args.report,
-            notifier=notifier,
-            snapshot_db=args.snapshot_db,
-            keep_raw_days=args.keep_raw_days,
-            keep_report_days=args.keep_report_days,
-            keep_snapshot_days=args.keep_snapshot_days,
-        )
-    elif args.mode == "scheduler":
-        run_scheduler(
-            config,
-            sources_config,
-            interval_hours=args.interval,
-            notifier=notifier,
-            snapshot_db=args.snapshot_db,
-            keep_raw_days=args.keep_raw_days,
-            keep_report_days=args.keep_report_days,
-            keep_snapshot_days=args.keep_snapshot_days,
-        )
+    try:
+        if args.mode == "once":
+            run_once(
+                config,
+                sources_config,
+                generate_report_flag=args.report,
+                notifier=notifier,
+                snapshot_db=args.snapshot_db,
+                keep_raw_days=args.keep_raw_days,
+                keep_report_days=args.keep_report_days,
+                keep_snapshot_days=args.keep_snapshot_days,
+            )
+        elif args.mode == "scheduler":
+            run_scheduler(
+                config,
+                sources_config,
+                interval_hours=args.interval,
+                notifier=notifier,
+                snapshot_db=args.snapshot_db,
+                keep_raw_days=args.keep_raw_days,
+                keep_report_days=args.keep_report_days,
+                keep_snapshot_days=args.keep_snapshot_days,
+            )
+    except EmptyCollectionError as exc:
+        print(f"::error title=PriceRadar empty collection::{exc}", flush=True)
+        raise SystemExit(1) from exc
+    except (OversizedDatabaseError, EmptyOutputError) as exc:
+        print(f"::error title=PriceRadar output rejected::{exc}", flush=True)
+        raise SystemExit(1) from exc
 
 
 if __name__ == "__main__":

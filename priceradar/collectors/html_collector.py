@@ -10,12 +10,11 @@ from datetime import UTC, datetime
 from typing import Any
 from urllib.parse import urljoin, urlparse
 
-import requests
 import structlog
 from bs4 import BeautifulSoup, Tag
 
+from priceradar.collection_contract import PRICERADAR_USER_AGENT, REQUEST_TIMEOUT_SECONDS
 from priceradar.collectors.base import BaseCollector, RawItem
-
 
 logger = structlog.get_logger(__name__)
 
@@ -27,8 +26,8 @@ class HtmlCollector(BaseCollector):
         super().__init__(source_id, config)
         self.url = config.get("url", "")
         self.selectors = config.get("selectors", {})
-        self.user_agent = config.get("user_agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64)")
-        self.timeout = config.get("timeout", 30)
+        self.user_agent = PRICERADAR_USER_AGENT
+        self.timeout = config.get("timeout", REQUEST_TIMEOUT_SECONDS)
 
     def collect(self) -> list[RawItem]:
         """URL에서 HTML을 가져와 파싱하여 RawItem 리스트 반환"""
@@ -49,7 +48,7 @@ class HtmlCollector(BaseCollector):
         headers = {"User-Agent": self.user_agent}
 
         try:
-            response = requests.get(url, headers=headers, timeout=self.timeout)
+            response = self.http_get(url, headers=headers, timeout=self.timeout)
             response.raise_for_status()
             response.encoding = response.apparent_encoding
             return response.text

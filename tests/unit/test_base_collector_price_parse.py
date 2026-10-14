@@ -6,6 +6,7 @@ returned mostly-null current_price values for human-readable price strings.
 The fix removes commas entirely so the thousands separator no longer splits
 the number.
 """
+
 from __future__ import annotations
 
 import pytest
@@ -40,7 +41,9 @@ def collector() -> _StubCollector:
         ("500원", 500),
     ],
 )
-def test_parses_comma_thousands_separator(collector: _StubCollector, value: str, expected: int) -> None:
+def test_parses_comma_thousands_separator(
+    collector: _StubCollector, value: str, expected: int
+) -> None:
     assert collector._parse_price_value(value) == expected
 
 
@@ -58,3 +61,22 @@ def test_int_passthrough_positive(collector: _StubCollector) -> None:
 
 def test_float_passthrough(collector: _StubCollector) -> None:
     assert collector._parse_price_value(12345.7) == 12345
+
+
+def test_title_year_is_not_a_price(monkeypatch: pytest.MonkeyPatch, tmp_path) -> None:
+    """A model year in a title must not be stored as current_price."""
+    monkeypatch.setenv("RADAR_CRAWL_HEALTH_DB_PATH", str(tmp_path / "health.duckdb"))
+    from priceradar.collectors.clien_collector import ClienCollector
+    from priceradar.collectors.fmkorea_collector import FmkoreaCollector
+    from priceradar.collectors.quasarzone_collector import QuasarzoneCollector
+
+    title = "[캉골] 2026 시크릿 세일"
+    priced = "[카카오] 하겐다즈 파인트 4개 (28,710원)"
+    collectors = [
+        ClienCollector("clien", {"url": "https://www.clien.net/service/board/jirum"}),
+        FmkoreaCollector("fmkorea", {"url": "https://www.fmkorea.com/hotdeal"}),
+        QuasarzoneCollector("quasarzone", {"url": "https://quasarzone.com/bbs/qb_saleinfo"}),
+    ]
+    for collector in collectors:
+        assert collector._extract_price_from_title(title) is None
+        assert collector._extract_price_from_title(priced) == 28710

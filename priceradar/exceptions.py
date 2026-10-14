@@ -44,3 +44,12 @@ class SearchError(RadarError):
 
 class NotificationError(RadarError):
     """Error sending notifications."""
+
+
+class ChallengePageError(CollectionError):
+    """The response was a bot wall or an error page, not a listing."""
+
+    def __init__(self, source_name: str, url: str):
+        self.source_name = source_name
+        self.url = url
+        super().__init__(f"[{source_name}] challenge or error page at {url}")

@@ -59,6 +59,20 @@ python main.py --mode scheduler --interval 24
 ### 환경 변수
 
 - `PRICERADAR_DB_PATH`: DuckDB 파일 경로. 기본값은 `data/priceradar.duckdb`.
+- 소스 YAML의 `required_env`에 적힌 이름이 비어 있으면 그 소스는 건너뛴다. 로그에는 변수 이름만 남고 값은 없다.
+
+## 운영 계약
+
+Radar-Template의 수집·저장 계약을 따른다.
+
+- `radar-core`는 `git+https://github.com/ai-frendly-datahub/radar-core.git@main`이다.
+- User-Agent는 `PriceRadar/0.1`이고, 요청 타임아웃 기본값은 45초이며, TLS 검증은 항상 켠다.
+- Cloudflare 챌린지, 쿠키 월, 403·404 제목은 저장하지 않는다. 알구몬과 퀘이사존은 챌린지 뒤에 있으므로 끄고, 우회 코드는 넣지 않는다.
+- 없는 시크릿은 `::warning` 한 번과 `data/raw/<날짜>/<소스>.skip.json`(환경 변수 이름만)으로 남긴다. 수집 실패는 빈 리스트이며 샘플 데이터를 만들지 않는다.
+- 활성 소스 수집이 0건이거나, 출력이 0바이트이거나, DuckDB가 100MiB 이상이면 작업이 실패한다.
+- 데이터 푸시에 `continue-on-error`가 없다. Pages 배포는 그 푸시 단계가 성공한 뒤에만 실행된다.
+- `price_scores`는 상품당 최신 1건만 남긴다. 매일 전 상품 점수를 추가하면 파일이 GitHub 100MiB 한도를 넘겨 요약 JSON 푸시가 거절된다.
+- 테스트 시각은 `tests/reference_dates.py`(2026-03-13 12:00 UTC)를 쓴다.
 
 ### 데이터 품질 리포트
 

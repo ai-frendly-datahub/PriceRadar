@@ -11,5 +11,5 @@ statsmodels>=0.14.0
 prophet>=1.1
 structlog>=23.2.0
 pybreaker>=1.0.0
-radar-core>=0.2.0
+radar-core @ git+https://github.com/ai-frendly-datahub/radar-core.git@main
 playwright>=1.40.0

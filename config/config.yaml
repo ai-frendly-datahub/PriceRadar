@@ -6,8 +6,8 @@ database:
 
 # 수집 설정
 collection:
-  user_agent: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
-  timeout: 30
+  user_agent: "PriceRadar/0.1 (+https://github.com/ai-frendly-datahub/PriceRadar)"
+  timeout: 45
   retry_count: 3
   delay_between_requests: 1.0
   algumon_request_delay: 1.0
