@@ -74,6 +74,9 @@ jobs:
 
       - name: Comment PR with coverage
         if: ${{ github.event_name == 'pull_request' && always() }}
+        # GitHub returns 422 when a PR diff includes large DuckDB snapshots.
+        # The comment is informational; a missing comment must not fail the check.
+        continue-on-error: true
         uses: py-cov-action/python-coverage-comment-action@v3
         with:
           GITHUB_TOKEN: ${{ github.token }}
