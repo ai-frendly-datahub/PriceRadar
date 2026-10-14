@@ -21,8 +21,8 @@ import structlog
 from bs4 import BeautifulSoup, Tag
 from tenacity import retry, stop_after_attempt, wait_exponential
 
+from priceradar.collection_contract import PRICERADAR_USER_AGENT, REQUEST_TIMEOUT_SECONDS
 from priceradar.collectors.base import BaseCollector, RawItem
-
 
 logger = structlog.get_logger(__name__)
 
@@ -34,17 +34,15 @@ class FmkoreaCollector(BaseCollector):
         super().__init__(source_id, config)
         self.base_url = "https://www.fmkorea.com"
         self.board_url = config.get("url", f"{self.base_url}/hotdeal")
-        self.user_agent = config.get(
-            "user_agent",
-            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
-        )
-        self.timeout = int(config.get("timeout", 30))
+        self.user_agent = PRICERADAR_USER_AGENT
+        self.timeout = int(config.get("timeout", REQUEST_TIMEOUT_SECONDS))
         self.request_delay = float(config.get("request_delay", 3.0))
         self.max_items = int(config.get("max_items", 200))
         self.max_pages = int(config.get("max_pages", 10))
 
         # Initialize session with persistent cookies and headers
         self.session = requests.Session()
+        self.session.verify = True
         self.session.headers.update(
             {
                 "User-Agent": self.user_agent,
@@ -132,7 +130,8 @@ class FmkoreaCollector(BaseCollector):
     def _fetch_html(self, url: str) -> str | None:
         """HTTP 요청으로 HTML 가져오기"""
         try:
-            response = self.session.get(url, timeout=self.timeout)
+            response = self.session.get(url, timeout=self.timeout, verify=True)
+            self._reject_challenge(url, response)
 
             if response.status_code == 430:
                 time.sleep(5)
@@ -147,9 +146,7 @@ class FmkoreaCollector(BaseCollector):
 
     def _parse_post(self, post_elem: Tag) -> RawItem | None:
         """게시물 요소에서 상품 정보 추출"""
-        title_elem = post_elem.select_one(
-            "h3.title a, a.hotdeal_var8, a.post-title, a.subject"
-        )
+        title_elem = post_elem.select_one("h3.title a, a.hotdeal_var8, a.post-title, a.subject")
         if not title_elem:
             return None
 
@@ -228,7 +225,7 @@ class FmkoreaCollector(BaseCollector):
                 if parsed is not None:
                     return parsed
 
-        return self._parse_price_value(title)
+        return None
 
     def _generate_product_id(self, url: str) -> str:
         """URL 기반 상품 ID 생성"""

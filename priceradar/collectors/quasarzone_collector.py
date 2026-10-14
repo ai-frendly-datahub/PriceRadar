@@ -7,13 +7,12 @@ from datetime import UTC, datetime
 from typing import Any
 from urllib.parse import parse_qs, urlencode, urljoin, urlparse, urlunparse
 
-import requests
 import structlog
 from bs4 import BeautifulSoup, Tag
 from tenacity import retry, stop_after_attempt, wait_exponential
 
+from priceradar.collection_contract import PRICERADAR_USER_AGENT, REQUEST_TIMEOUT_SECONDS
 from priceradar.collectors.base import BaseCollector, RawItem
-
 
 logger = structlog.get_logger(__name__)
 
@@ -24,11 +23,8 @@ class QuasarzoneCollector(BaseCollector):
         self.base_url = "https://quasarzone.com"
         self.board_path = "/bbs/qb_saleinfo"
         self.url = config.get("url", urljoin(self.base_url, self.board_path))
-        self.user_agent = config.get(
-            "user_agent",
-            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
-        )
-        self.timeout = config.get("timeout", 30)
+        self.user_agent = PRICERADAR_USER_AGENT
+        self.timeout = config.get("timeout", REQUEST_TIMEOUT_SECONDS)
         self.request_delay = float(
             config.get("request_delay", config.get("delay_between_requests", 1.0))
         )
@@ -138,7 +134,7 @@ class QuasarzoneCollector(BaseCollector):
             "Referer": self.base_url,
         }
 
-        response = requests.get(page_url, headers=headers, timeout=self.timeout)
+        response = self.http_get(page_url, headers=headers, timeout=self.timeout)
         response.raise_for_status()
         response.encoding = "utf-8"
         return response.text
@@ -288,7 +284,7 @@ class QuasarzoneCollector(BaseCollector):
             if parsed is not None:
                 return parsed
 
-        return self._parse_price_value(title)
+        return None
 
     def _extract_discount_rate(self, text: str) -> float | None:
         matched = re.search(r"(\d+(?:\.\d+)?)\s*%", text)

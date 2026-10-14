@@ -6,13 +6,12 @@ from datetime import UTC, datetime
 from typing import Any
 from urllib.parse import parse_qs, urlencode, urljoin, urlparse, urlunparse
 
-import requests
 import structlog
 from bs4 import BeautifulSoup, Tag
 from tenacity import retry, stop_after_attempt, wait_exponential
 
+from priceradar.collection_contract import PRICERADAR_USER_AGENT, REQUEST_TIMEOUT_SECONDS
 from priceradar.collectors.base import BaseCollector, RawItem
-
 
 logger = structlog.get_logger(__name__)
 
@@ -28,8 +27,8 @@ class RuliwebCollector(BaseCollector):
         super().__init__(source_id, config)
         self.base_url = "https://bbs.ruliweb.com"
         self.url = config.get("url", f"{self.base_url}/market/board/1020")
-        self.user_agent = config.get("user_agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64)")
-        self.timeout = self._safe_int(config.get("timeout"), default=30)
+        self.user_agent = PRICERADAR_USER_AGENT
+        self.timeout = self._safe_int(config.get("timeout"), default=REQUEST_TIMEOUT_SECONDS)
         self.max_pages = max(1, self._safe_int(config.get("max_pages"), default=5))
         self.delay_between_requests = self._safe_float(
             config.get("delay_between_requests"), default=0.3
@@ -116,7 +115,7 @@ class RuliwebCollector(BaseCollector):
             "Accept-Language": "ko-KR,ko;q=0.9,en-US;q=0.8,en;q=0.7",
         }
 
-        response = requests.get(url, headers=headers, timeout=self.timeout)
+        response = self.http_get(url, headers=headers, timeout=self.timeout)
         response.raise_for_status()
         response.encoding = "utf-8"
         return response.text

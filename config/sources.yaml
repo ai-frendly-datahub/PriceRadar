@@ -198,7 +198,8 @@ sources:
      name: "알구몬 메인"
      type: algumon
      url: "https://www.algumon.com/"
-     enabled: true
+     enabled: false
+     disabled_reason: "cloudflare_turnstile_on_/n/deal_2026-10. TLS stays on and this repo does not bypass the challenge. Re-enable only with a public page that is not a bot wall."
      trust_tier: T2_expert
      collector_type: C3_algumon
      category: electronics
@@ -226,7 +227,8 @@ sources:
      name: "퀘이사존 핫딜"
      type: quasarzone
      url: "https://quasarzone.com/bbs/qb_saleinfo"
-     enabled: true
+     enabled: false
+     disabled_reason: "cloudflare_just_a_moment_http_403 since 2026-04. No bypass. Newest stored row is 2026-04-30."
      trust_tier: T2_expert
      collector_type: C3_quasarzone
      category: electronics

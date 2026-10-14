@@ -19,6 +19,12 @@ from bs4 import BeautifulSoup, Tag
 from requests.adapters import HTTPAdapter
 from urllib3.util.retry import Retry
 
+from priceradar.collection_contract import (
+    PRICERADAR_USER_AGENT,
+    REQUEST_TIMEOUT_SECONDS,
+    is_challenge_or_error_page,
+)
+from priceradar.exceptions import ChallengePageError
 from priceradar.resilience import SourceCircuitBreakerManager
 from priceradar.validators import (
     validate_discount_rate,
@@ -26,7 +32,6 @@ from priceradar.validators import (
     validate_price_range,
     validate_url_format,
 )
-
 
 logger = logging.getLogger(__name__)
 _DEFAULT_HEALTH_DB_PATH = "data/radar_data.duckdb"
@@ -103,6 +108,8 @@ class BaseCollector(ABC):
         adapter = HTTPAdapter(max_retries=retry_strategy)
         session.mount("http://", adapter)
         session.mount("https://", adapter)
+        session.headers["User-Agent"] = PRICERADAR_USER_AGENT
+        session.verify = True
         return session
 
     def _apply_rate_limit(self) -> None:
@@ -126,7 +133,13 @@ class BaseCollector(ABC):
             self._throttler.acquire(source_name)
 
             try:
-                response = self._session.get(url, timeout=self._resolve_timeout())
+                response = self._session.get(
+                    url,
+                    timeout=self._resolve_timeout(),
+                    verify=True,
+                    headers={"User-Agent": PRICERADAR_USER_AGENT},
+                )
+                self._reject_challenge(url, response)
                 if response.status_code in (408, 429, 500, 502, 503, 504, 522, 524):
                     logger.warning(
                         "Retryable HTTP status %s for %s, will retry",
@@ -163,10 +176,33 @@ class BaseCollector(ABC):
         return self.source_id
 
     def _resolve_timeout(self) -> float:
-        timeout = self.config.get("timeout", 30)
+        timeout = self.config.get("timeout", REQUEST_TIMEOUT_SECONDS)
         if isinstance(timeout, (int, float)):
             return float(timeout)
-        return 30.0
+        return float(REQUEST_TIMEOUT_SECONDS)
+
+    def http_get(self, url: str, **kwargs: Any) -> requests.Response:
+        """GET with PriceRadar's user agent and TLS verification.
+
+        A Cloudflare challenge or cookie wall raises ``ChallengePageError``.
+        Callers return an empty list; they do not invent listings.
+        """
+        headers = dict(kwargs.pop("headers", None) or {})
+        headers["User-Agent"] = PRICERADAR_USER_AGENT
+        timeout = kwargs.pop("timeout", self._resolve_timeout())
+        response = requests.get(url, headers=headers, timeout=timeout, verify=True, **kwargs)
+        self._reject_challenge(url, response)
+        return response
+
+    def _reject_challenge(self, url: str, response: requests.Response) -> None:
+        content_type = response.headers.get("Content-Type", "")
+        if "json" in content_type.lower():
+            return
+        text = response.text[:8000]
+        title_match = re.search(r"<title[^>]*>(.*?)</title>", text, flags=re.IGNORECASE | re.DOTALL)
+        title = re.sub(r"\s+", " ", title_match.group(1)).strip() if title_match else ""
+        if is_challenge_or_error_page(title, text):
+            raise ChallengePageError(self.source_id, url)
 
     def _fetch(self, url: str) -> requests.Response:
         source_name = self._resolve_source_name()

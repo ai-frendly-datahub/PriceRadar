@@ -130,6 +130,34 @@ def _compact_database(database_path: Path, *, max_bytes: int | None = None) -> d
     return fallback
 
 
+def _prepare_price_database(database_path: Path) -> dict[str, object]:
+    """Shrink score history before radar-core compaction copies the file."""
+    bytes_now = database_path.stat().st_size if database_path.exists() else 0
+    fallback: dict[str, object] = {
+        "prepared": False,
+        "reason": "skipped",
+        "scores_removed": 0,
+        "rows_backfilled": 0,
+        "bytes": bytes_now,
+    }
+    try:
+        from priceradar.graph.graph_store import prepare_price_database
+    except ImportError as exc:
+        logger.warning("price_prepare_unavailable path=%s error=%s", database_path, exc)
+        fallback["reason"] = "unavailable"
+        return fallback
+    try:
+        result = prepare_price_database(database_path)
+    except Exception as exc:
+        logger.warning("price_prepare_failed path=%s error=%s", database_path, exc)
+        fallback["reason"] = "failed"
+        return fallback
+    if isinstance(result, dict):
+        return result
+    fallback["reason"] = "invalid_result"
+    return fallback
+
+
 def apply_date_storage_policy(
     *,
     database_path: Path,
@@ -141,7 +169,11 @@ def apply_date_storage_policy(
     keep_snapshot_days: int = 30,
     max_bytes: int | None = None,
 ) -> dict[str, object]:
-    # Compact first so the snapshot is a copy of the file that will be committed.
+    # Drop redundant scores before compaction. Compaction leaves a database
+    # untouched when it is already under the byte budget, and it will not
+    # delete history whose newest row is older than the age window.
+    prepared = _prepare_price_database(database_path)
+    # Compact next so the snapshot is a copy of the file that will be committed.
     compact = _compact_database(database_path, max_bytes=max_bytes)
     snapshot_path = snapshot_database(database_path) if snapshot_db else None
     raw_removed = cleanup_date_directories(raw_data_dir, keep_days=keep_raw_days)
@@ -160,4 +192,7 @@ def apply_date_storage_policy(
         "db_compacted": compact.get("compacted"),
         "db_rows_deleted": compact.get("rows_deleted"),
         "db_reason": compact.get("reason"),
+        "scores_removed": prepared.get("scores_removed"),
+        "rows_backfilled": prepared.get("rows_backfilled"),
+        "prepare_reason": prepared.get("reason"),
     }

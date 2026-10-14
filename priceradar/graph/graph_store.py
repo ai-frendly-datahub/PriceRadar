@@ -3,13 +3,15 @@ GraphStore - DuckDB 기반 데이터 저장 및 조회
 """
 
 import os
+import shutil
+from pathlib import Path
 from typing import Any
 
 import duckdb
 
 from priceradar.analyzers.price_scorer import PriceScore
+from priceradar.collection_contract import infer_stock_status
 from priceradar.collectors.base import RawItem
-
 
 _PRICE_SNAPSHOT_CONTRACT_COLUMNS = {
     "discount_price": "INTEGER",
@@ -49,8 +51,7 @@ class GraphStore:
         self.conn.execute("CREATE SEQUENCE IF NOT EXISTS score_seq START 1")
 
         # products 테이블
-        self.conn.execute(
-            """
+        self.conn.execute("""
             CREATE TABLE IF NOT EXISTS products (
                 product_id VARCHAR PRIMARY KEY,
                 title VARCHAR NOT NULL,
@@ -62,12 +63,10 @@ class GraphStore:
                 first_seen TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                 last_updated TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             )
-        """
-        )
+        """)
 
         # price_snapshots 테이블
-        self.conn.execute(
-            """
+        self.conn.execute("""
             CREATE TABLE IF NOT EXISTS price_snapshots (
                 snapshot_id INTEGER PRIMARY KEY DEFAULT nextval('snapshot_seq'),
                 product_id VARCHAR NOT NULL,
@@ -82,13 +81,11 @@ class GraphStore:
                 is_lowest_now BOOLEAN DEFAULT FALSE,
                 FOREIGN KEY (product_id) REFERENCES products(product_id)
             )
-        """
-        )
+        """)
         self._ensure_price_snapshot_contract_columns()
 
         # price_scores 테이블
-        self.conn.execute(
-            """
+        self.conn.execute("""
             CREATE TABLE IF NOT EXISTS price_scores (
                 score_id INTEGER PRIMARY KEY DEFAULT nextval('score_seq'),
                 product_id VARCHAR NOT NULL,
@@ -102,8 +99,7 @@ class GraphStore:
                 explanation VARCHAR,
                 FOREIGN KEY (product_id) REFERENCES products(product_id)
             )
-        """
-        )
+        """)
 
         # 인덱스 생성
         self.conn.execute(
@@ -136,6 +132,9 @@ class GraphStore:
         """RawItem을 저장 (products + price_snapshots)"""
         discount_price = _resolve_discount_price(item)
         effective_price = _resolve_effective_price(item, discount_price)
+        stock_status = item.stock_status or infer_stock_status(
+            item.title, item.current_price if item.current_price is not None else discount_price
+        )
 
         # 1. products 테이블에 upsert
         self.conn.execute(
@@ -190,14 +189,15 @@ class GraphStore:
                 item.card_benefit,
                 item.shipping_fee,
                 effective_price,
-                item.stock_status,
+                stock_status,
                 item.option_signature,
                 item.outlier_flag,
             ],
         )
 
     def save_price_score(self, score: PriceScore) -> None:
-        """PriceScore를 저장"""
+        """Keep one score per product. Daily runs must not append a new row."""
+        self.conn.execute("DELETE FROM price_scores WHERE product_id = ?", [score.product_id])
         self.conn.execute(
             """
             INSERT INTO price_scores (
@@ -216,6 +216,109 @@ class GraphStore:
                 score.explanation,
             ],
         )
+
+    def backfill_contract_fields(self) -> int:
+        """Fill effective price and stock from values already stored.
+
+        Prices are copied from the observed current or discount price. Stock
+        comes from an explicit sold-out title or from a positive price.
+        Rows with no price stay null.
+        """
+        price_row = self.conn.execute("""
+            SELECT COUNT(*) FROM price_snapshots
+            WHERE (
+                discount_price IS NULL
+                AND current_price IS NOT NULL
+                AND current_price > 0
+            ) OR (
+                effective_price IS NULL
+                AND COALESCE(discount_price, current_price) IS NOT NULL
+                AND COALESCE(discount_price, current_price) > 0
+            )
+            """).fetchone()
+        self.conn.execute("""
+            UPDATE price_snapshots
+            SET discount_price = current_price
+            WHERE discount_price IS NULL
+              AND current_price IS NOT NULL
+              AND current_price > 0
+            """)
+        self.conn.execute("""
+            UPDATE price_snapshots
+            SET effective_price = GREATEST(
+                0,
+                COALESCE(discount_price, current_price)
+                    - COALESCE(coupon_value, 0)
+                    - COALESCE(card_benefit, 0)
+                    + COALESCE(shipping_fee, 0)
+            )
+            WHERE effective_price IS NULL
+              AND COALESCE(discount_price, current_price) IS NOT NULL
+              AND COALESCE(discount_price, current_price) > 0
+            """)
+
+        missing_stock = self.conn.execute("""
+            SELECT s.snapshot_id, p.title, s.current_price, s.discount_price
+            FROM price_snapshots s
+            JOIN products p ON p.product_id = s.product_id
+            WHERE s.stock_status IS NULL OR s.stock_status = ''
+            """).fetchall()
+        updates: list[tuple[str, int]] = []
+        for snapshot_id, title, current_price, discount_price in missing_stock:
+            observed_price = current_price if current_price is not None else discount_price
+            status = infer_stock_status(
+                str(title) if title is not None else None,
+                int(observed_price) if observed_price is not None else None,
+            )
+            if status:
+                updates.append((status, int(snapshot_id)))
+        if updates:
+            self.conn.executemany(
+                "UPDATE price_snapshots SET stock_status = ? WHERE snapshot_id = ?",
+                updates,
+            )
+        price_updates = int(price_row[0]) if price_row else 0
+        return price_updates + len(updates)
+
+    def retain_latest_price_scores(self) -> int:
+        """Delete every score except the newest row for each product."""
+        before_row = self.conn.execute("SELECT COUNT(*) FROM price_scores").fetchone()
+        before = int(before_row[0]) if before_row else 0
+        self.conn.execute("""
+            CREATE TEMP TABLE IF NOT EXISTS keep_price_scores AS
+            SELECT score_id FROM (
+                SELECT
+                    score_id,
+                    row_number() OVER (
+                        PARTITION BY product_id
+                        ORDER BY ts DESC, score_id DESC
+                    ) AS rn
+                FROM price_scores
+            )
+            WHERE rn = 1
+            """)
+        self.conn.execute("DELETE FROM keep_price_scores")
+        self.conn.execute("""
+            INSERT INTO keep_price_scores
+            SELECT score_id FROM (
+                SELECT
+                    score_id,
+                    row_number() OVER (
+                        PARTITION BY product_id
+                        ORDER BY ts DESC, score_id DESC
+                    ) AS rn
+                FROM price_scores
+            )
+            WHERE rn = 1
+            """)
+        self.conn.execute("""
+            DELETE FROM price_scores
+            WHERE score_id NOT IN (SELECT score_id FROM keep_price_scores)
+            """)
+        self.conn.execute("DROP TABLE keep_price_scores")
+        after_row = self.conn.execute("SELECT COUNT(*) FROM price_scores").fetchone()
+        after = int(after_row[0]) if after_row else 0
+        return max(0, before - after)
 
     def get_top_deals(self, limit: int = 20, category: str | None = None) -> list[dict[str, Any]]:
         """
@@ -418,15 +521,13 @@ class GraphStore:
         scores_row = self.conn.execute("SELECT COUNT(*) FROM price_scores").fetchone()
         total_scores = int(scores_row[0]) if scores_row else 0
 
-        categories = self.conn.execute(
-            """
+        categories = self.conn.execute("""
             SELECT category, COUNT(*) as count
             FROM products
             WHERE category IS NOT NULL
             GROUP BY category
             ORDER BY count DESC
-        """
-        ).fetchall()
+        """).fetchall()
 
         return {
             "total_products": total_products,
@@ -447,6 +548,83 @@ class GraphStore:
     def __exit__(self, exc_type: Any, exc_val: Any, exc_tb: Any) -> None:
         """Context manager 종료"""
         self.close()
+
+
+def _is_duckdb_file(path: Path) -> bool:
+    if not path.is_file() or path.stat().st_size < 16:
+        return False
+    header = path.read_bytes()[:16]
+    return b"DUCK" in header
+
+
+def rewrite_duckdb_file(path: Path) -> int:
+    """Copy the database into a new file so DELETE reclaims disk space."""
+    export_dir = path.with_name(path.name + ".export")
+    rewritten = path.with_name(path.name + ".rewrite")
+    wal = Path(str(rewritten) + ".wal")
+    for leftover in (rewritten, wal):
+        if leftover.exists():
+            leftover.unlink()
+    if export_dir.exists():
+        shutil.rmtree(export_dir)
+
+    source = duckdb.connect(str(path))
+    try:
+        source.execute(f"EXPORT DATABASE '{export_dir.as_posix()}' (FORMAT PARQUET)")
+        source.execute("CHECKPOINT")
+    finally:
+        source.close()
+
+    output = duckdb.connect(str(rewritten))
+    try:
+        output.execute(f"IMPORT DATABASE '{export_dir.as_posix()}'")
+        output.execute("CHECKPOINT")
+    finally:
+        output.close()
+
+    os.replace(rewritten, path)
+    if wal.exists():
+        wal.unlink()
+    if export_dir.exists():
+        shutil.rmtree(export_dir)
+    return path.stat().st_size
+
+
+def prepare_price_database(database_path: Path) -> dict[str, object]:
+    """Backfill contract fields and keep one price score per product.
+
+    Compaction in radar-core refuses to empty a database whose newest row is
+    already older than the age window. PriceRadar's score table grew by one
+    row per product per run, so the file sits on GitHub's 100 MiB limit even
+    though the price history itself is small. This trims scores first.
+    """
+    path = Path(database_path)
+    if not _is_duckdb_file(path):
+        return {
+            "prepared": False,
+            "reason": "not_duckdb",
+            "scores_removed": 0,
+            "rows_backfilled": 0,
+            "bytes": path.stat().st_size if path.exists() else 0,
+        }
+
+    store = GraphStore(str(path))
+    try:
+        rows_backfilled = store.backfill_contract_fields()
+        scores_removed = store.retain_latest_price_scores()
+    finally:
+        store.close()
+
+    size = path.stat().st_size
+    if scores_removed > 0:
+        size = rewrite_duckdb_file(path)
+    return {
+        "prepared": True,
+        "reason": "rewritten" if scores_removed > 0 else "updated",
+        "scores_removed": scores_removed,
+        "rows_backfilled": rows_backfilled,
+        "bytes": size,
+    }
 
 
 def _resolve_discount_price(item: RawItem) -> int | None:

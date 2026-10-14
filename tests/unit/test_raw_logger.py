@@ -7,6 +7,7 @@ from typing import cast
 
 from priceradar.models import Article
 from priceradar.raw_logger import RawLogger
+from tests.reference_dates import REFERENCE_NOW
 
 
 def _make_article(*, title: str = "Sample title", summary: str = "요약") -> Article:
@@ -22,12 +23,12 @@ def _make_article(*, title: str = "Sample title", summary: str = "요약") -> Ar
 
 
 def test_log_creates_yyyy_mm_dd_directory_and_jsonl_file(tmp_path: Path) -> None:
-    logger = RawLogger(tmp_path)
+    logger = RawLogger(tmp_path, now=REFERENCE_NOW)
     article = _make_article()
 
     output_path = logger.log([article], source_name="MySource")
 
-    assert output_path.parent.name == datetime.now(UTC).date().isoformat()
+    assert output_path.parent.name == "2026-03-13"
     assert output_path.name == "MySource.jsonl"
     assert output_path.exists()
 
@@ -87,13 +88,12 @@ def test_log_replaces_slashes_in_source_name_for_safe_filename(tmp_path: Path) -
     assert output_path.exists()
 
 
-def test_log_with_empty_articles_creates_empty_file(tmp_path: Path) -> None:
+def test_log_with_empty_articles_does_not_leave_zero_byte_file(tmp_path: Path) -> None:
     logger = RawLogger(tmp_path)
 
     output_path = logger.log([], source_name="empty")
 
-    assert output_path.exists()
-    assert output_path.read_text(encoding="utf-8") == ""
+    assert not output_path.exists()
 
 
 def test_log_prevents_duplicate_links_on_rerun(tmp_path: Path) -> None:

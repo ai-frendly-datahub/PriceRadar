@@ -16,13 +16,12 @@ from datetime import UTC, datetime
 from typing import Any
 from urllib.parse import urljoin
 
-import requests
 import structlog
 from bs4 import BeautifulSoup, Tag
 from tenacity import retry, stop_after_attempt, wait_exponential
 
+from priceradar.collection_contract import PRICERADAR_USER_AGENT, REQUEST_TIMEOUT_SECONDS
 from priceradar.collectors.base import BaseCollector, RawItem
-
 
 logger = structlog.get_logger(__name__)
 
@@ -34,11 +33,8 @@ class ClienCollector(BaseCollector):
         super().__init__(source_id, config)
         self.base_url = "https://www.clien.net"
         self.board_url = config.get("url", f"{self.base_url}/service/board/jirum")
-        self.user_agent = config.get(
-            "user_agent",
-            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
-        )
-        self.timeout = int(config.get("timeout", 30))
+        self.user_agent = PRICERADAR_USER_AGENT
+        self.timeout = int(config.get("timeout", REQUEST_TIMEOUT_SECONDS))
         self.request_delay = float(config.get("request_delay", 1.0))
         self.max_items = int(config.get("max_items", 100))
         self.max_pages = int(config.get("max_pages", 5))
@@ -69,15 +65,13 @@ class ClienCollector(BaseCollector):
 
             soup = BeautifulSoup(html_content, "html.parser")
             row_selector = (
-                "div.list_item.symph_row, div.list_item, tr.list_item, "
-                "div[data-role='list-row']"
+                "div.list_item.symph_row, div.list_item, tr.list_item, " "div[data-role='list-row']"
             )
             # jirum board uses <span class="list_subject"><a>...</a></span>
             # whereas notice rows use <a class="list_subject">.
             # Either pattern is acceptable as a title-link signal.
             title_link_selector = (
-                f"{row_selector} a.list_subject, "
-                f"{row_selector} span.list_subject a"
+                f"{row_selector} a.list_subject, " f"{row_selector} span.list_subject a"
             )
             if not self._validate_html_schema(
                 soup,
@@ -87,8 +81,17 @@ class ClienCollector(BaseCollector):
                 },
                 context=page_url,
             ):
-                logger.warning("schema_invalid_skip_source", source_id=self.source_id, url=page_url)
-                break
+                # One interstitial or block page must not drop the pages that
+                # already parsed, or the pages that follow.
+                page_title = soup.title.get_text(" ", strip=True) if soup.title else ""
+                logger.warning(
+                    "schema_invalid_skip_page",
+                    source_id=self.source_id,
+                    url=page_url,
+                    html_length=len(html_content),
+                    page_title=page_title[:120],
+                )
+                continue
 
             post_elements = soup.select(row_selector)
 
@@ -132,7 +135,7 @@ class ClienCollector(BaseCollector):
         }
 
         try:
-            response = requests.get(url, headers=headers, timeout=self.timeout)
+            response = self.http_get(url, headers=headers, timeout=self.timeout)
             response.raise_for_status()
             response.encoding = "utf-8"
             return response.text
@@ -238,7 +241,8 @@ class ClienCollector(BaseCollector):
                 if parsed is not None:
                     return parsed
 
-        return self._parse_price_value(title)
+        # A bare number such as a model year is not a price.
+        return None
 
     def _generate_product_id(self, url: str) -> str:
         """URL 기반 상품 ID 생성"""
