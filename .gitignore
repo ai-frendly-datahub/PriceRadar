@@ -71,6 +71,7 @@ test_*.py
 !tests/unit/test_price_contract_fields.py
 !tests/unit/test_anomaly.py
 !tests/unit/test_base_collector_price_parse.py
+!tests/unit/test_dealbada_collector.py
 debug_*.py
 check_db.py
 find_*.py

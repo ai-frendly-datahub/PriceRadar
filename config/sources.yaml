@@ -273,6 +273,7 @@ sources:
      collector_type: C3_dealbada
      category: market
      request_delay: 1.0
+     timeout: 45
      max_items: 100
      max_pages: 5
      description: "딜바다 - 다양한 쇼핑몰의 핫딜 정보 통합"
