@@ -6,6 +6,7 @@ Fallcent Collector - 폴센트 가격 추적 서비스 크롤러
 
 from __future__ import annotations
 
+import hashlib
 import re
 from datetime import UTC, datetime
 from typing import Any
@@ -17,7 +18,6 @@ from bs4 import BeautifulSoup, Tag
 from tenacity import retry, stop_after_attempt, wait_exponential
 
 from priceradar.collectors.base import BaseCollector, RawItem
-
 
 logger = structlog.get_logger(__name__)
 
@@ -85,9 +85,19 @@ class FallcentCollector(BaseCollector):
         """
         items: list[RawItem] = []
 
-        product_links = soup.find_all(
-            "a", href=re.compile(r"^/product/[A-Za-z0-9_-]{6,}/")
-        )
+        # 2026-10: the homepage no longer links products at /product/<hash>/.
+        # The visible cards are short links on fcnt.link. Nav links such as
+        # /product/recommend/ and /product/search/ are still ignored below.
+        legacy_links = soup.find_all("a", href=re.compile(r"^/product/[A-Za-z0-9_-]{6,}/"))
+        short_links = soup.find_all("a", href=re.compile(r"(?:^https?://(?:www\.)?)?fcnt\.link/"))
+        product_links: list[Tag] = []
+        seen_hrefs: set[str] = set()
+        for link in [*legacy_links, *short_links]:
+            href = link.get("href")
+            if not isinstance(href, str) or href in seen_hrefs:
+                continue
+            seen_hrefs.add(href)
+            product_links.append(link)
         if not product_links:
             logger.warning(
                 "schema_invalid_skip_source",
@@ -126,12 +136,9 @@ class FallcentCollector(BaseCollector):
     def _parse_single_product(self, link_elem: Tag, category: str = "all") -> RawItem | None:
         """단일 상품 정보 파싱
 
-        새 폴센트 스키마 가정:
-          <a href="/product/<HASH>/?from=...">
-            <img alt="<상품명>" src="...">
-            <p ... line-clamp-2 ...>상품명</p>
-            <span ...>가격원</span>   (예: "3,160원")
-          </a>
+        폴센트 상품 카드:
+          구형 <a href="/product/<HASH>/"> … </a>
+          2026-10 홈 <a href="https://fcnt.link/<token>"> … </a>
         """
         href = link_elem.get("href")
         if not isinstance(href, str) or not href:
@@ -140,14 +147,18 @@ class FallcentCollector(BaseCollector):
         product_url = urljoin(self.base_url, href)
         parsed_url = urlparse(product_url)
 
-        # /product/<HASH>/ 에서 HASH 추출 → product_id
-        path_match = re.match(r"^/product/([A-Za-z0-9_-]+)/?", parsed_url.path)
-        if not path_match:
-            return None
-
-        fallcent_hash = path_match.group(1)
-        if fallcent_hash in {"recommend", "search"}:
-            return None
+        if "fcnt.link" in parsed_url.netloc:
+            token = parsed_url.path.strip("/")
+            if not token:
+                return None
+            fallcent_hash = hashlib.sha256(token.encode()).hexdigest()[:16]
+        else:
+            path_match = re.match(r"^/product/([A-Za-z0-9_-]+)/?", parsed_url.path)
+            if not path_match:
+                return None
+            fallcent_hash = path_match.group(1)
+            if fallcent_hash in {"recommend", "search"}:
+                return None
         product_id = f"fallcent_{fallcent_hash}"
 
         # 제목 추출: <p class="...line-clamp-2..."> 우선, 그 다음 img[alt]

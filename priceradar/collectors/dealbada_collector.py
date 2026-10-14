@@ -24,7 +24,6 @@ from tenacity import retry, stop_after_attempt, wait_exponential
 
 from priceradar.collectors.base import BaseCollector, RawItem
 
-
 logger = structlog.get_logger(__name__)
 
 
@@ -42,7 +41,10 @@ class DealbadaCollector(BaseCollector):
             "user_agent",
             "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
         )
-        self.timeout = int(config.get("timeout", 30))
+        # Page 5 of the domestic board often answers just under or over 30s
+        # (2026-10-13: two read timeouts, then a ~29s success). 45s avoids
+        # burning the retry budget on a page that is slow rather than down.
+        self.timeout = int(config.get("timeout", 45))
         self.request_delay = float(config.get("request_delay", 1.0))
         self.max_items = int(config.get("max_items", 100))
         self.max_pages = int(config.get("max_pages", 5))
@@ -65,10 +67,7 @@ class DealbadaCollector(BaseCollector):
 
         # gnuboard5 표준 row 패턴 — 본문 행(`<tr class="">`)과 일부 강조 행을
         # 모두 잡고, 공지(`tr.bo_notice`)는 별도로 걸러낸다.
-        row_selector = (
-            "table tbody tr:has(td.td_subject), "
-            "table tr:has(td.td_subject)"
-        )
+        row_selector = "table tbody tr:has(td.td_subject), " "table tr:has(td.td_subject)"
         title_selector = "td.td_subject a[href*='wr_id=']"
 
         for page in range(1, self.max_pages + 1):
@@ -81,10 +80,12 @@ class DealbadaCollector(BaseCollector):
             try:
                 html_content = self._fetch_html(page_url)
             except Exception as e:
+                # A single slow page (page 1 on 2026-10-11, page 3 on 2026-10-10,
+                # page 5 on 2026-10-13) used to abort every later page.
                 logger.error(
                     "page_load_failed", source_id=self.source_id, url=page_url, error=str(e)
                 )
-                break
+                continue
 
             if not html_content:
                 break

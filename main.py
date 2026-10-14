@@ -34,7 +34,6 @@ from priceradar.reporter import generate_report as generate_core_report
 from priceradar.search_index import SearchIndex
 from priceradar.validators import validate_article
 
-
 _PRICE_CATEGORY_SKIP = {"all", "기타", "misc", "unknown", "price"}
 _PRICE_BRAND_STOPWORDS = {
     "국산",
@@ -323,13 +322,11 @@ def run_scoring(config: dict[str, Any]) -> None:
 
     # 모든 상품에 대해 스코어링 (최신 스냅샷 기준)
     # 간단한 구현: 최근 스냅샷을 조회하여 스코어 계산
-    result = store.conn.execute(
-        """
+    result = store.conn.execute("""
         SELECT DISTINCT p.product_id
         FROM products p
         INNER JOIN price_snapshots s ON p.product_id = s.product_id
-    """
-    ).fetchall()
+    """).fetchall()
 
     total_scored = 0
 
@@ -538,6 +535,13 @@ def run_once(
         snapshot_path = date_storage.get("snapshot_path")
         if isinstance(snapshot_path, str) and snapshot_path:
             print(f"Snapshot saved to {snapshot_path}")
+        print(
+            "DuckDB compaction: "
+            f"compacted={date_storage.get('db_compacted')} "
+            f"reason={date_storage.get('db_reason')} "
+            f"bytes={date_storage.get('db_bytes_before')} -> {date_storage.get('db_bytes')} "
+            f"rows_deleted={date_storage.get('db_rows_deleted')}"
+        )
     except Exception as e:
         print(f"Date storage policy failed: {e}")
 

@@ -70,3 +70,80 @@ def test_apply_date_storage_policy_cleans_snapshot_retention(tmp_path: Path) -> 
 
     assert result["snapshots_removed"] == 1
     assert not old_snapshot.parent.exists()
+
+
+def test_apply_date_storage_policy_compacts_before_snapshot(tmp_path: Path, monkeypatch) -> None:
+    from priceradar.date_storage import apply_date_storage_policy
+
+    db_path = tmp_path / "data" / "priceradar.duckdb"
+    db_path.parent.mkdir(parents=True)
+    db_path.write_text("oversized")
+    events: list[str] = []
+
+    def fake_compact(path, *, max_bytes=None):
+        events.append(f"compact:{Path(path).read_text()}")
+        Path(path).write_text("shrunk")
+        return {
+            "compacted": True,
+            "reason": "compacted",
+            "bytes": 6,
+            "bytes_before": 9,
+            "rows_deleted": 12,
+            "max_bytes": max_bytes,
+        }
+
+    monkeypatch.setattr("priceradar.date_storage._load_compactor", lambda: fake_compact)
+
+    result = apply_date_storage_policy(
+        database_path=db_path,
+        raw_data_dir=tmp_path / "data" / "raw",
+        report_dir=tmp_path / "reports",
+        keep_raw_days=180,
+        keep_report_days=90,
+        keep_snapshot_days=30,
+        snapshot_db=True,
+        max_bytes=90,
+    )
+
+    snapshot = tmp_path / "data" / "snapshots"
+    snapshot_file = next(snapshot.rglob("priceradar.duckdb"))
+    assert events == ["compact:oversized"]
+    assert db_path.read_text() == "shrunk"
+    assert snapshot_file.read_text() == "shrunk"
+    assert result["snapshot_path"] == str(snapshot_file)
+    assert result["db_compacted"] is True
+    assert result["db_bytes_before"] == 9
+    assert result["db_bytes"] == 6
+    assert result["db_rows_deleted"] == 12
+    assert result["db_reason"] == "compacted"
+
+
+def test_apply_date_storage_policy_keeps_snapshot_when_compact_fails(
+    tmp_path: Path, monkeypatch
+) -> None:
+    from priceradar.date_storage import apply_date_storage_policy
+
+    db_path = tmp_path / "data" / "priceradar.duckdb"
+    db_path.parent.mkdir(parents=True)
+    db_path.write_text("price-db")
+
+    def broken_compact(path, *, max_bytes=None):
+        raise RuntimeError("rewrite failed")
+
+    monkeypatch.setattr("priceradar.date_storage._load_compactor", lambda: broken_compact)
+
+    result = apply_date_storage_policy(
+        database_path=db_path,
+        raw_data_dir=tmp_path / "data" / "raw",
+        report_dir=tmp_path / "reports",
+        keep_raw_days=180,
+        keep_report_days=90,
+        snapshot_db=True,
+    )
+
+    assert db_path.read_text() == "price-db"
+    assert result["db_compacted"] is False
+    assert result["db_reason"] == "failed"
+    snapshot_path = result["snapshot_path"]
+    assert isinstance(snapshot_path, str)
+    assert Path(snapshot_path).read_text() == "price-db"
