@@ -35,6 +35,11 @@ jobs:
         pip install "radar-core @ git+https://github.com/ai-frendly-datahub/radar-core.git@main"
         pip install -r requirements.txt
 
+    - name: Install Playwright Chromium
+      run: |
+        python -m playwright install chromium
+        python -m playwright install-deps chromium
+
     - name: Run collection and generate report
       run: |
         python main.py --mode once --report --config config/config.yaml --sources config/sources.yaml --notifications config/notifications.yaml --snapshot-db --keep-raw-days 180 --keep-report-days 90 --keep-snapshot-days 30
@@ -89,3 +94,13 @@ jobs:
         git diff --quiet && git diff --staged --quiet || (git commit -m "Daily collection: $(date +'%Y-%m-%d')" && git push)
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+    - name: Deploy to GitHub Pages
+      uses: peaceiris/actions-gh-pages@v4
+      with:
+        github_token: ${{ secrets.GITHUB_TOKEN }}
+        publish_branch: gh-pages
+        publish_dir: ./reports
+        user_name: github-actions[bot]
+        user_email: github-actions[bot]@users.noreply.github.com
+        commit_message: "docs: update radar report"
