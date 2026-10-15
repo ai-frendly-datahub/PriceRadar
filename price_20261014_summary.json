@@ -92,5 +92,43 @@
     "fallcent_main": 12,
     "algumon_main": 12
   },
-  "generated_at": "2026-10-14T00:29:16.843648+09:00"
+  "generated_at": "2026-10-14T06:16:32.610783+00:00",
+  "ontology": {
+    "repo": "PriceRadar",
+    "category": "price",
+    "ontology_version": "0.1.0",
+    "event_model_ids": [
+      "price.purchase_benefit_snapshot",
+      "price.sku_price_snapshot",
+      "price.stock_status_transition"
+    ],
+    "event_model_mappings": {
+      "sku_price_snapshot": "price.sku_price_snapshot",
+      "purchase_benefit_snapshot": "price.purchase_benefit_snapshot",
+      "stock_status_transition": "price.stock_status_transition"
+    },
+    "entity_type_hints": [
+      "commerce.sku",
+      "commerce.vendor"
+    ],
+    "source_role_ids": [
+      "community_signal",
+      "operational_evidence"
+    ],
+    "source_role_mappings": {
+      "fallcent_main": "operational_evidence",
+      "enuri_main": "operational_evidence",
+      "danawa_browser": "operational_evidence",
+      "dealbada_main": "community_signal",
+      "ruliweb_market": "community_signal",
+      "clien_albulgumai": "community_signal",
+      "algumon_main": "community_signal",
+      "quasarzone_saleinfo": "community_signal"
+    },
+    "evidence_policy_ids": [
+      "traceable_url_required",
+      "cross_reference_required",
+      "non_authoritative_context_only"
+    ]
+  }
 }
