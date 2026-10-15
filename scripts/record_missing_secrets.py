@@ -7,6 +7,10 @@ import re
 import sys
 from pathlib import Path
 
+_REPO_ROOT = Path(__file__).resolve().parent.parent
+if str(_REPO_ROOT) not in sys.path:
+    sys.path.insert(0, str(_REPO_ROOT))
+
 from priceradar.collection_contract import emit_missing_secret_warning
 from priceradar.raw_logger import RawLogger
 
@@ -26,7 +30,7 @@ def main(argv: list[str] | None = None) -> int:
             return 2
         if os.environ.get(name, "").strip():
             continue
-        emit_missing_secret_warning("failure-notify", name)
+        emit_missing_secret_warning("failure-notify", [name])
         raw_logger.log_skip(source_name="failure-notify", required_env=[name])
     return 0
 
