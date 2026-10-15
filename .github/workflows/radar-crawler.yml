@@ -22,6 +22,7 @@ concurrency:
 jobs:
   run-and-deploy:
     runs-on: ubuntu-latest
+    timeout-minutes: 60
     
     steps:
       - name: Checkout
@@ -84,9 +85,15 @@ jobs:
           retention-days: 30
 
       - name: Record missing notification secret
+        # Notification is optional: a missing secret only produces a warning and never blocks data commits.
+        continue-on-error: true
         env:
           NOTIFICATION_WEBHOOK_URL: ${{ secrets.NOTIFICATION_WEBHOOK_URL }}
-        run: python scripts/record_missing_secrets.py NOTIFICATION_WEBHOOK_URL
+        run: |
+          if [ -z "${NOTIFICATION_WEBHOOK_URL:-}" ]; then
+            echo "::warning::NOTIFICATION_WEBHOOK_URL is not set; notifications skipped, data commit continues"
+          fi
+          PYTHONPATH="$PWD" python scripts/record_missing_secrets.py NOTIFICATION_WEBHOOK_URL || echo "::warning::could not record missing-secret skip; continuing"
 
       - name: Verify dated data artifact
         run: |
