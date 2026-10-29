@@ -18,6 +18,7 @@ from pathlib import Path
 from typing import Any
 
 import yaml
+from radar_core.dates import daily_partition_date
 
 from priceradar.analyzers.price_scorer import PriceScorer
 from priceradar.collection_contract import (
@@ -46,6 +47,7 @@ from priceradar.reporter import generate_index_html
 from priceradar.reporter import generate_report as generate_core_report
 from priceradar.search_index import SearchIndex
 from priceradar.validators import validate_article
+
 
 _PRICE_CATEGORY_SKIP = {"all", "기타", "misc", "unknown", "price"}
 _PRICE_BRAND_STOPWORDS = {
@@ -447,7 +449,7 @@ def generate_report(
         output_dir = str(config.get("reporting", {}).get("output_path", "reports"))
 
     os.makedirs(output_dir, exist_ok=True)
-    report_date = datetime.now(tz=UTC).strftime("%Y%m%d")
+    report_date = daily_partition_date().strftime("%Y%m%d")
     report_path = os.path.join(output_dir, f"price_{report_date}.html")
 
     articles: list[Article] = []
@@ -533,7 +535,7 @@ def run_once(
     quality_report: dict[str, Any] | None = None
     try:
         report_dir = Path(config.get("reporting", {}).get("output_path", "reports"))
-        target_date = datetime.now(tz=UTC).date()
+        target_date = daily_partition_date()
         max_items = config.get("reporting", {}).get("max_items_per_report", 100)
         db_path = config["database"]["path"]
         quality_store = GraphStore(db_path)

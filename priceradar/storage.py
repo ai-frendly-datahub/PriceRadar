@@ -13,12 +13,25 @@ from .models import Article, PriceEvent, PriceSnapshot, Product
 
 
 def _utc_naive(dt: datetime | None) -> datetime | None:
-    """Convert tz-aware datetime to UTC naive for DuckDB."""
+    """UTC wall time for DuckDB TIMESTAMP columns.
+
+    Those columns cannot store an offset. Naive inputs are already UTC wall
+    time. Aware inputs are converted to UTC and then stripped.
+    """
     if dt is None:
         return None
-    if dt.tzinfo:
-        return dt.astimezone(UTC).replace(tzinfo=None)
-    return dt
+    if dt.tzinfo is None or dt.tzinfo.utcoffset(dt) is None:
+        return dt.replace(tzinfo=None)
+    return dt.astimezone(UTC).replace(tzinfo=None)
+
+
+def _as_utc_aware(dt: datetime | None) -> datetime | None:
+    """Reattach UTC to a TIMESTAMP read back from DuckDB."""
+    if dt is None or not isinstance(dt, datetime):
+        return None
+    if dt.tzinfo is None or dt.tzinfo.utcoffset(dt) is None:
+        return dt.replace(tzinfo=UTC)
+    return dt.astimezone(UTC)
 
 
 class RadarStorage:
@@ -51,9 +64,15 @@ class RadarStorage:
                 summary TEXT,
                 published TIMESTAMP,
                 collected_at TIMESTAMP NOT NULL,
+                published_raw TEXT,
                 entities_json TEXT
             );
             """)
+        columns = {
+            str(row[1]) for row in self.conn.execute("PRAGMA table_info('articles')").fetchall()
+        }
+        if "published_raw" not in columns:
+            self.conn.execute("ALTER TABLE articles ADD COLUMN published_raw TEXT")
         _ = self.conn.execute(
             "CREATE INDEX IF NOT EXISTS idx_articles_category_time ON articles (category, published, collected_at);"
         )
@@ -72,6 +91,7 @@ class RadarStorage:
                     article.summary,
                     _utc_naive(article.published),
                     now,
+                    article.published_raw,
                     json.dumps(article.matched_entities, ensure_ascii=False),
                 )
             )
@@ -83,13 +103,17 @@ class RadarStorage:
             _ = self.conn.begin()
             _ = self.conn.executemany(
                 """
-                INSERT INTO articles (category, source, title, link, summary, published, collected_at, entities_json)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                INSERT INTO articles (
+                    category, source, title, link, summary, published, collected_at,
+                    published_raw, entities_json
+                )
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
                 ON CONFLICT(link) DO UPDATE SET
                     title = EXCLUDED.title,
                     summary = EXCLUDED.summary,
                     published = EXCLUDED.published,
                     collected_at = EXCLUDED.collected_at,
+                    published_raw = COALESCE(EXCLUDED.published_raw, articles.published_raw),
                     entities_json = EXCLUDED.entities_json
                 """,
                 rows,
@@ -107,7 +131,8 @@ class RadarStorage:
         since = _utc_naive(datetime.now(UTC) - timedelta(days=days))
         cur = self.conn.execute(
             """
-            SELECT category, source, title, link, summary, published, collected_at, entities_json
+            SELECT category, source, title, link, summary, published, collected_at,
+                   entities_json, published_raw
             FROM articles
             WHERE category = ? AND COALESCE(published, collected_at) >= ?
             ORDER BY COALESCE(published, collected_at) DESC
@@ -117,18 +142,36 @@ class RadarStorage:
         )
         rows = cast(
             list[
-                tuple[str, str, str, str, str | None, datetime | None, datetime | None, str | None]
+                tuple[
+                    str,
+                    str,
+                    str,
+                    str,
+                    str | None,
+                    datetime | None,
+                    datetime | None,
+                    str | None,
+                    str | None,
+                ]
             ],
             cur.fetchall(),
         )
 
         results: list[Article] = []
         for row in rows:
-            category_value, source, title, link, summary, published, collected_at, raw_entities = (
-                row
-            )
-            published_at = published if isinstance(published, datetime) else None
-            collected = collected_at if isinstance(collected_at, datetime) else None
+            (
+                category_value,
+                source,
+                title,
+                link,
+                summary,
+                published,
+                collected_at,
+                raw_entities,
+                published_raw,
+            ) = row
+            published_at = _as_utc_aware(published)
+            collected = _as_utc_aware(collected_at)
 
             entities: dict[str, list[str]] = {}
             if raw_entities:
@@ -157,6 +200,7 @@ class RadarStorage:
                     category=str(category_value),
                     matched_entities=entities,
                     collected_at=collected,
+                    published_raw=str(published_raw) if published_raw else None,
                 )
             )
         return results

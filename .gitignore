@@ -75,6 +75,7 @@ test_*.py
 !tests/unit/test_fallcent_collector.py
 !tests/unit/test_collection_contract.py
 !tests/unit/test_url_dedupe.py
+!tests/unit/test_published_dates.py
 debug_*.py
 check_db.py
 find_*.py
