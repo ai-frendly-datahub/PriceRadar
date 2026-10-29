@@ -40,8 +40,7 @@ class RadarStorage:
         self.close()
 
     def _ensure_tables(self) -> None:
-        _ = self.conn.execute(
-            """
+        _ = self.conn.execute("""
             CREATE SEQUENCE IF NOT EXISTS articles_id_seq START 1;
             CREATE TABLE IF NOT EXISTS articles (
                 id BIGINT PRIMARY KEY DEFAULT nextval('articles_id_seq'),
@@ -54,8 +53,7 @@ class RadarStorage:
                 collected_at TIMESTAMP NOT NULL,
                 entities_json TEXT
             );
-            """
-        )
+            """)
         _ = self.conn.execute(
             "CREATE INDEX IF NOT EXISTS idx_articles_category_time ON articles (category, published, collected_at);"
         )
@@ -215,8 +213,7 @@ class PriceStorage:
         self.conn.close()
 
     def _ensure_tables(self) -> None:
-        _ = self.conn.execute(
-            """
+        _ = self.conn.execute("""
             CREATE TABLE IF NOT EXISTS products (
                 id TEXT PRIMARY KEY,
                 title TEXT NOT NULL,
@@ -247,8 +244,7 @@ class PriceStorage:
                 radar_score DOUBLE NOT NULL,
                 explanation TEXT NOT NULL
             );
-            """
-        )
+            """)
 
     def upsert_products(self, products: Iterable[Product]) -> int:
         rows = [
@@ -285,6 +281,24 @@ class PriceStorage:
             rows,
         )
         return len(rows)
+
+    def has_url_snapshot_on(self, url: str, snapshot_date: date) -> bool:
+        """같은 product URL이 해당 날짜에 스냅샷을 이미 가지면 True."""
+        normalized = url.strip()
+        if not normalized:
+            return False
+        row = self.conn.execute(
+            """
+            SELECT 1
+            FROM products AS p
+            INNER JOIN price_snapshots AS s ON s.product_id = p.id
+            WHERE p.product_url = ?
+              AND CAST(s.ts AS DATE) = ?
+            LIMIT 1
+            """,
+            [normalized, snapshot_date],
+        ).fetchone()
+        return row is not None
 
     def insert_snapshots(self, snapshots: Iterable[PriceSnapshot]) -> int:
         rows = [

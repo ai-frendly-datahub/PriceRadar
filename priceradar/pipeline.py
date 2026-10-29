@@ -1,14 +1,16 @@
 from __future__ import annotations
 
-from datetime import UTC, datetime
+from collections.abc import Iterable
+from datetime import UTC, date, datetime
+from pathlib import Path
 from typing import Any
 
 from dateutil import parser as date_parser
 
+from .collectors.base import RawItem
 from .models import PriceEvent, PriceSnapshot, Product
 from .scoring import compute_radar_score
 from .storage import PriceStorage
-
 
 _CONTRACT_META_FIELDS = (
     "discount_price",
@@ -29,39 +31,75 @@ _NUMERIC_CONTRACT_META_FIELDS = {
 }
 
 
+def dedupe_by_url(items: Iterable[RawItem], seen_urls: set[str]) -> list[RawItem]:
+    """URL이 이미 본 집합에 있으면 insert 대상에서 뺀다.
+
+    비어 있지 않은 URL의 첫 항목만 남기고 ``seen_urls``에 기록한다.
+    URL이 비어 있으면 중복으로 보지 않는다.
+    """
+    unique: list[RawItem] = []
+    for item in items:
+        url = item.url.strip()
+        if url and url in seen_urls:
+            continue
+        if url:
+            seen_urls.add(url)
+        unique.append(item)
+    return unique
+
+
 def run_pipeline(
-    raw_snapshots: list[dict[str, Any]], *, db_path, limit: int | None = None
+    raw_snapshots: list[dict[str, Any]],
+    *,
+    db_path: Path | str,
+    limit: int | None = None,
 ) -> tuple[int, int, int]:
-    """스냅샷 JSON 배열 → 정규화 → 스코어링 → DuckDB 저장."""
+    """스냅샷 JSON 배열 → 정규화 → URL 중복 제거 → 스코어링 → DuckDB 저장."""
     normalized_products: dict[str, Product] = {}
     snapshots: list[PriceSnapshot] = []
     events: list[PriceEvent] = []
-
-    for idx, item in enumerate(raw_snapshots):
-        if limit is not None and idx >= limit:
-            break
-        snap, product = _normalize_snapshot(item)
-        normalized_products[product.id] = product
-        snapshots.append(snap)
-
-        is_new_low = bool(item.get("is_new_low") or item.get("list_type") == "lowest_now")
-        popularity_hint = float(item.get("popularity_hint", 0))
-        volatility_hint = item.get("volatility")
-        events.append(
-            compute_radar_score(
-                snapshot=snap,
-                is_new_low=is_new_low,
-                popularity_hint=popularity_hint,
-                volatility_hint=volatility_hint,
-            )
-        )
+    seen_url_days: set[tuple[str, date]] = set()
 
     store = PriceStorage(db_path)
-    store.upsert_products(normalized_products.values())
-    n_snap = store.insert_snapshots(snapshots)
-    n_events = store.insert_events(events)
-    store.close()
-    return len(normalized_products), n_snap, n_events
+    try:
+        for idx, item in enumerate(raw_snapshots):
+            if limit is not None and idx >= limit:
+                break
+            snap, product = _normalize_snapshot(item)
+            url = product.product_url.strip()
+            if url:
+                day = _calendar_day(snap.ts)
+                if (url, day) in seen_url_days or store.has_url_snapshot_on(url, day):
+                    continue
+                seen_url_days.add((url, day))
+
+            normalized_products[product.id] = product
+            snapshots.append(snap)
+
+            is_new_low = bool(item.get("is_new_low") or item.get("list_type") == "lowest_now")
+            popularity_hint = float(item.get("popularity_hint", 0))
+            volatility_hint = item.get("volatility")
+            events.append(
+                compute_radar_score(
+                    snapshot=snap,
+                    is_new_low=is_new_low,
+                    popularity_hint=popularity_hint,
+                    volatility_hint=volatility_hint,
+                )
+            )
+
+        store.upsert_products(normalized_products.values())
+        n_snap = store.insert_snapshots(snapshots)
+        n_events = store.insert_events(events)
+        return len(normalized_products), n_snap, n_events
+    finally:
+        store.close()
+
+
+def _calendar_day(ts: datetime) -> date:
+    if ts.tzinfo is None:
+        return ts.date()
+    return ts.astimezone(UTC).date()
 
 
 def _normalize_snapshot(item: dict[str, Any]) -> tuple[PriceSnapshot, Product]:

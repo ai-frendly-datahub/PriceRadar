@@ -39,6 +39,7 @@ from priceradar.exceptions import ChallengePageError
 from priceradar.graph.graph_store import GraphStore
 from priceradar.models import Article, CategoryConfig
 from priceradar.notifier import PipelineNotifier, detect_price_notifications
+from priceradar.pipeline import dedupe_by_url
 from priceradar.quality_report import build_quality_report, write_quality_report
 from priceradar.raw_logger import RawLogger
 from priceradar.reporter import generate_index_html
@@ -96,8 +97,8 @@ def run_collection(
     source_counts: dict[str, int] = {}
     sources = sources_config.get("sources", [])
 
-    # 중복 제거를 위한 URL 세트 (메모리 내)
-    seen_urls = set()
+    # 같은 날 이미 저장된 URL은 insert 전에 건너뛴다.
+    seen_urls = store.urls_collected_on(datetime.now(UTC).date())
 
     for source in sources:
         if not source.get("enabled", False):
@@ -136,11 +137,7 @@ def run_collection(
                     continue
                 validated_items.append(item)
 
-            unique_items: list[RawItem] = []
-            for item in validated_items:
-                if item.url and item.url in seen_urls:
-                    continue
-                unique_items.append(item)
+            unique_items = dedupe_by_url(validated_items, seen_urls)
 
             if notifier is not None and unique_items:
                 product_ids = [item.product_id for item in unique_items if item.product_id]
@@ -159,21 +156,18 @@ def run_collection(
                     )
 
             raw_logger.log(
-                (_raw_item_to_article(item) for item in validated_items), source_name=source_id
+                (_raw_item_to_article(item) for item in unique_items), source_name=source_id
             )
 
             # 중복 제거 후 저장
-            saved_count = 0
             for item in unique_items:
-                store.save_raw_item(item)
+                if not store.save_raw_item(item):
+                    continue
                 search_index.upsert(
                     link=item.url,
                     title=item.title,
                     body=_build_search_body(item.platform, item.category, item.brand),
                 )
-                if item.url:
-                    seen_urls.add(item.url)
-                saved_count += 1
                 total_items_saved += 1
 
             print(f"[{source_id}] {len(validated_items)}개 아이템 수집 완료")

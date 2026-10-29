@@ -4,6 +4,7 @@ GraphStore - DuckDB 기반 데이터 저장 및 조회
 
 import os
 import shutil
+from datetime import UTC, date, datetime
 from pathlib import Path
 from typing import Any
 
@@ -128,8 +129,47 @@ class GraphStore:
             "UPDATE price_snapshots SET outlier_flag = FALSE WHERE outlier_flag IS NULL"
         )
 
-    def save_raw_item(self, item: RawItem) -> None:
-        """RawItem을 저장 (products + price_snapshots)"""
+    def has_url_snapshot_on(self, url: str, snapshot_date: date) -> bool:
+        """같은 URL이 해당 날짜에 가격 스냅샷을 이미 가지면 True."""
+        normalized = url.strip()
+        if not normalized:
+            return False
+        row = self.conn.execute(
+            """
+            SELECT 1
+            FROM products p
+            INNER JOIN price_snapshots s ON s.product_id = p.product_id
+            WHERE p.url = ?
+              AND CAST(s.ts AS DATE) = ?
+            LIMIT 1
+            """,
+            [normalized, snapshot_date],
+        ).fetchone()
+        return row is not None
+
+    def urls_collected_on(self, snapshot_date: date) -> set[str]:
+        """해당 날짜에 스냅샷이 있는 상품 URL."""
+        rows = self.conn.execute(
+            """
+            SELECT DISTINCT p.url
+            FROM products p
+            INNER JOIN price_snapshots s ON s.product_id = p.product_id
+            WHERE p.url IS NOT NULL
+              AND CAST(s.ts AS DATE) = ?
+            """,
+            [snapshot_date],
+        ).fetchall()
+        return {str(row[0]).strip() for row in rows if row[0] and str(row[0]).strip()}
+
+    def save_raw_item(self, item: RawItem) -> bool:
+        """RawItem을 저장 (products + price_snapshots).
+
+        같은 URL이 같은 날에 이미 있으면 insert하지 않고 False를 반환한다.
+        """
+        url = item.url.strip()
+        if url and self.has_url_snapshot_on(url, _snapshot_calendar_day(item.collected_at)):
+            return False
+
         discount_price = _resolve_discount_price(item)
         effective_price = _resolve_effective_price(item, discount_price)
         stock_status = item.stock_status or infer_stock_status(
@@ -154,7 +194,7 @@ class GraphStore:
             [
                 item.product_id,
                 item.title,
-                item.url,
+                url or item.url,
                 item.category,
                 item.brand,
                 item.platform,
@@ -194,6 +234,7 @@ class GraphStore:
                 item.outlier_flag,
             ],
         )
+        return True
 
     def save_price_score(self, score: PriceScore) -> None:
         """Keep one score per product. Daily runs must not append a new row."""
@@ -625,6 +666,12 @@ def prepare_price_database(database_path: Path) -> dict[str, object]:
         "rows_backfilled": rows_backfilled,
         "bytes": size,
     }
+
+
+def _snapshot_calendar_day(ts: datetime) -> date:
+    if ts.tzinfo is None:
+        return ts.date()
+    return ts.astimezone(UTC).date()
 
 
 def _resolve_discount_price(item: RawItem) -> int | None:
