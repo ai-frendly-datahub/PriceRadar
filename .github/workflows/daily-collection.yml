@@ -2,7 +2,8 @@ name: Daily Price Collection
 
 on:
   schedule:
-    # 매일 오전 9시 (KST 18시 = UTC 9시)
+    # 이 저장소의 유일한 수집 스케줄. 매일 09:00 UTC (KST 18:00).
+    # 수집, data 커밋, Pages 배포를 하는 다른 cron을 추가하지 않는다.
     - cron: '0 9 * * *'
   workflow_dispatch:  # 수동 실행 가능
 

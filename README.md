@@ -247,7 +247,7 @@ MIT License – 자세한 내용은 [LICENSE](LICENSE)를 참고하세요.
 <!-- DATAHUB-OPS-AUDIT:START -->
 ## DataHub Operations
 
-- CI/CD workflows: `daily-collection.yml`, `pr-checks.yml`, `radar-crawler.yml`, `release.yml`.
+- CI/CD workflows: `daily-collection.yml` (sole scheduled collection), `pr-checks.yml`, `release.yml`.
 - GitHub Pages visualization: `reports/index.html` (valid HTML); https://ai-frendly-datahub.github.io/PriceRadar/.
 - Latest remote Pages check: HTTP 200, HTML.
 - Local workspace audit: 70 Python files parsed, 0 syntax errors.
