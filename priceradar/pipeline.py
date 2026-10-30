@@ -9,8 +9,10 @@ from dateutil import parser as date_parser
 
 from .collectors.base import RawItem
 from .models import PriceEvent, PriceSnapshot, Product
+from .run_date import run_calendar_day
 from .scoring import compute_radar_score
 from .storage import PriceStorage
+
 
 _CONTRACT_META_FIELDS = (
     "discount_price",
@@ -97,9 +99,8 @@ def run_pipeline(
 
 
 def _calendar_day(ts: datetime) -> date:
-    if ts.tzinfo is None:
-        return ts.date()
-    return ts.astimezone(UTC).date()
+    """KST date of a snapshot instant. Naive values are UTC wall time."""
+    return run_calendar_day(ts)
 
 
 def _normalize_snapshot(item: dict[str, Any]) -> tuple[PriceSnapshot, Product]:

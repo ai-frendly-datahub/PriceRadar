@@ -2,8 +2,11 @@ from __future__ import annotations
 
 import logging
 import shutil
-from datetime import UTC, date, datetime, timedelta
+from datetime import date, timedelta
 from pathlib import Path
+
+from radar_core.dates import daily_partition_date
+
 
 logger = logging.getLogger(__name__)
 
@@ -17,7 +20,7 @@ def snapshot_database(
     if not db_path.exists():
         return None
 
-    target_date = snapshot_date or datetime.now(UTC).date()
+    target_date = snapshot_date or daily_partition_date()
     target_root = snapshot_root or db_path.parent / "snapshots"
     target_dir = target_root / target_date.isoformat()
     target_dir.mkdir(parents=True, exist_ok=True)
@@ -31,7 +34,7 @@ def cleanup_date_directories(base_dir: Path, *, keep_days: int, today: date | No
     if keep_days < 0 or not base_dir.exists():
         return 0
 
-    cutoff = (today or datetime.now(UTC).date()) - timedelta(days=keep_days)
+    cutoff = (today or daily_partition_date()) - timedelta(days=keep_days)
     removed = 0
     for child in base_dir.iterdir():
         if not child.is_dir():
@@ -60,7 +63,7 @@ def cleanup_dated_reports(report_dir: Path, *, keep_days: int, today: date | Non
     if keep_days < 0 or not report_dir.exists():
         return 0
 
-    cutoff = (today or datetime.now(UTC).date()) - timedelta(days=keep_days)
+    cutoff = (today or daily_partition_date()) - timedelta(days=keep_days)
     removed = 0
     for html_file in report_dir.glob("*.html"):
         if html_file.name == "index.html":
@@ -168,19 +171,22 @@ def apply_date_storage_policy(
     snapshot_db: bool,
     keep_snapshot_days: int = 30,
     max_bytes: int | None = None,
+    today: date | None = None,
 ) -> dict[str, object]:
     # Drop redundant scores before compaction. Compaction leaves a database
     # untouched when it is already under the byte budget, and it will not
     # delete history whose newest row is older than the age window.
+    run_day = today or daily_partition_date()
     prepared = _prepare_price_database(database_path)
     # Compact next so the snapshot is a copy of the file that will be committed.
     compact = _compact_database(database_path, max_bytes=max_bytes)
-    snapshot_path = snapshot_database(database_path) if snapshot_db else None
-    raw_removed = cleanup_date_directories(raw_data_dir, keep_days=keep_raw_days)
-    report_removed = cleanup_dated_reports(report_dir, keep_days=keep_report_days)
+    snapshot_path = snapshot_database(database_path, snapshot_date=run_day) if snapshot_db else None
+    raw_removed = cleanup_date_directories(raw_data_dir, keep_days=keep_raw_days, today=run_day)
+    report_removed = cleanup_dated_reports(report_dir, keep_days=keep_report_days, today=run_day)
     snapshots_removed = cleanup_snapshots(
         database_path.parent / "snapshots",
         keep_days=keep_snapshot_days,
+        today=run_day,
     )
     return {
         "snapshot_path": str(snapshot_path) if snapshot_path is not None else None,

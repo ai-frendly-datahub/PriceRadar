@@ -2,12 +2,14 @@ from __future__ import annotations
 
 import argparse
 import json
+from collections.abc import Iterable, Mapping
 from copy import deepcopy
 from datetime import UTC, date, datetime
 from pathlib import Path
-from typing import Any, Iterable, Mapping
+from typing import Any
 
 import yaml
+from radar_core.dates import daily_partition_date
 
 
 DEFAULT_REPORT_NAME = "price_quality.json"
@@ -33,7 +35,7 @@ def build_quality_report(
     deal_rows: Iterable[Mapping[str, Any]] | None = None,
 ) -> dict[str, Any]:
     generated_at = generated_at or datetime.now(UTC)
-    target_date = target_date or generated_at.date()
+    target_date = target_date or daily_partition_date(generated_at)
     data_quality = _dict_value(sources_config.get("data_quality"))
     sources = [
         source

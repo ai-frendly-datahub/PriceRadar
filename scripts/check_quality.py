@@ -4,12 +4,14 @@
 from __future__ import annotations
 
 import sys
-from datetime import UTC, date, datetime
+from collections.abc import Iterable, Mapping
+from datetime import date, datetime
 from pathlib import Path
-from typing import Any, Iterable, Mapping
+from typing import Any
 
 import duckdb
 import yaml
+from radar_core.dates import daily_partition_date
 
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
@@ -40,20 +42,21 @@ def _load_runtime_config(project_root: Path) -> dict[str, Any]:
 
 def _coerce_date(value: Any) -> date | None:
     if isinstance(value, datetime):
-        if value.tzinfo is None:
-            return value.date()
-        return value.astimezone(UTC).date()
+        return daily_partition_date(value)
     if isinstance(value, date):
         return value
     if isinstance(value, str) and value.strip():
         text = value.strip()
         try:
-            return datetime.fromisoformat(text.replace("Z", "+00:00")).date()
+            parsed = datetime.fromisoformat(text.replace("Z", "+00:00"))
         except ValueError:
-            try:
-                return date.fromisoformat(text[:10])
-            except ValueError:
-                return None
+            parsed = None
+        if isinstance(parsed, datetime):
+            return daily_partition_date(parsed)
+        try:
+            return date.fromisoformat(text[:10])
+        except ValueError:
+            return None
     return None
 
 
@@ -63,7 +66,7 @@ def _infer_target_date(deal_rows: Iterable[Mapping[str, Any]]) -> date:
         for row in deal_rows
         if (parsed := _coerce_date(row.get("collected_at") or row.get("observed_at"))) is not None
     ]
-    return max(observed_dates) if observed_dates else datetime.now(UTC).date()
+    return max(observed_dates) if observed_dates else daily_partition_date()
 
 
 def generate_quality_artifacts(project_root: Path = PROJECT_ROOT) -> tuple[dict[str, str], dict[str, Any]]:

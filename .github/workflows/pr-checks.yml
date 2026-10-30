@@ -8,7 +8,7 @@ on:
       - '**.py'
       - 'requirements.txt'
       - 'pyproject.toml'
-      - '.github/workflows/pr-checks.yml'
+      - '.github/workflows/**'
 
 permissions:
   contents: read
@@ -62,7 +62,6 @@ jobs:
       - name: Run tests with coverage
         run: |
           pytest tests/ -v --cov=. --cov-report=xml --cov-report=term-missing --tb=short
-        continue-on-error: true
 
       - name: Upload coverage to Codecov
         uses: codecov/codecov-action@v5
