@@ -4,7 +4,7 @@ GraphStore - DuckDB 기반 데이터 저장 및 조회
 
 import os
 import shutil
-from datetime import UTC, date, datetime
+from datetime import date, datetime
 from pathlib import Path
 from typing import Any
 
@@ -13,6 +13,8 @@ import duckdb
 from priceradar.analyzers.price_scorer import PriceScore
 from priceradar.collection_contract import infer_stock_status
 from priceradar.collectors.base import RawItem
+from priceradar.run_date import SNAPSHOT_KST_DATE_SQL, run_calendar_day
+
 
 _PRICE_SNAPSHOT_CONTRACT_COLUMNS = {
     "discount_price": "INTEGER",
@@ -135,12 +137,12 @@ class GraphStore:
         if not normalized:
             return False
         row = self.conn.execute(
-            """
+            f"""
             SELECT 1
             FROM products p
             INNER JOIN price_snapshots s ON s.product_id = p.product_id
             WHERE p.url = ?
-              AND CAST(s.ts AS DATE) = ?
+              AND {SNAPSHOT_KST_DATE_SQL} = ?
             LIMIT 1
             """,
             [normalized, snapshot_date],
@@ -150,12 +152,12 @@ class GraphStore:
     def urls_collected_on(self, snapshot_date: date) -> set[str]:
         """해당 날짜에 스냅샷이 있는 상품 URL."""
         rows = self.conn.execute(
-            """
+            f"""
             SELECT DISTINCT p.url
             FROM products p
             INNER JOIN price_snapshots s ON s.product_id = p.product_id
             WHERE p.url IS NOT NULL
-              AND CAST(s.ts AS DATE) = ?
+              AND {SNAPSHOT_KST_DATE_SQL} = ?
             """,
             [snapshot_date],
         ).fetchall()
@@ -669,9 +671,8 @@ def prepare_price_database(database_path: Path) -> dict[str, object]:
 
 
 def _snapshot_calendar_day(ts: datetime) -> date:
-    if ts.tzinfo is None:
-        return ts.date()
-    return ts.astimezone(UTC).date()
+    """KST date of a collected instant. Naive values are UTC wall time."""
+    return run_calendar_day(ts)
 
 
 def _resolve_discount_price(item: RawItem) -> int | None:

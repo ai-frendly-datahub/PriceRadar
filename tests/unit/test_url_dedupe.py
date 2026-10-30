@@ -72,15 +72,16 @@ def test_save_raw_item_skips_same_day_duplicate_url(tmp_path: Path) -> None:
 
 
 @pytest.mark.unit
-def test_save_raw_item_skips_naive_timestamps_from_the_same_local_day(tmp_path: Path) -> None:
+def test_save_raw_item_skips_naive_timestamps_from_the_same_kst_day(tmp_path: Path) -> None:
     store = GraphStore(str(tmp_path / "price.duckdb"))
-    # Collectors stamp items with naive local datetimes.
-    morning = datetime(2026, 4, 13, 8, 0, tzinfo=UTC).replace(tzinfo=None)
-    evening = datetime(2026, 4, 13, 18, 0, tzinfo=UTC).replace(tzinfo=None)
+    # Naive values are UTC wall time. 15:30 and 23:30 UTC are both 2026-04-14
+    # in KST (00:30 and 08:30), inside the 00:00-09:00 KST window.
+    early = datetime(2026, 4, 13, 15, 30, tzinfo=UTC).replace(tzinfo=None)
+    later = datetime(2026, 4, 13, 23, 30, tzinfo=UTC).replace(tzinfo=None)
     try:
-        assert store.save_raw_item(_item("sku-1", "https://example.com/p", when=morning))
+        assert store.save_raw_item(_item("sku-1", "https://example.com/p", when=early))
         assert not store.save_raw_item(
-            _item("sku-2", "https://example.com/p", when=evening, price=900)
+            _item("sku-2", "https://example.com/p", when=later, price=900)
         )
         count = store.conn.execute("SELECT COUNT(*) FROM price_snapshots").fetchone()
         assert count == (1,)

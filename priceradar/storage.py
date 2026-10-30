@@ -10,6 +10,7 @@ import duckdb
 
 from .exceptions import StorageError
 from .models import Article, PriceEvent, PriceSnapshot, Product
+from .run_date import SNAPSHOT_KST_DATE_SQL
 
 
 def _utc_naive(dt: datetime | None) -> datetime | None:
@@ -332,12 +333,12 @@ class PriceStorage:
         if not normalized:
             return False
         row = self.conn.execute(
-            """
+            f"""
             SELECT 1
             FROM products AS p
             INNER JOIN price_snapshots AS s ON s.product_id = p.id
             WHERE p.product_url = ?
-              AND CAST(s.ts AS DATE) = ?
+              AND {SNAPSHOT_KST_DATE_SQL} = ?
             LIMIT 1
             """,
             [normalized, snapshot_date],

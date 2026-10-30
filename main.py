@@ -13,12 +13,11 @@ import argparse
 import os
 import re
 import time
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime
 from pathlib import Path
 from typing import Any
 
 import yaml
-from radar_core.dates import daily_partition_date
 
 from priceradar.analyzers.price_scorer import PriceScorer
 from priceradar.collection_contract import (
@@ -45,6 +44,7 @@ from priceradar.quality_report import build_quality_report, write_quality_report
 from priceradar.raw_logger import RawLogger
 from priceradar.reporter import generate_index_html
 from priceradar.reporter import generate_report as generate_core_report
+from priceradar.run_date import run_calendar_day
 from priceradar.search_index import SearchIndex
 from priceradar.validators import validate_article
 
@@ -83,14 +83,18 @@ def run_collection(
     config: dict[str, Any],
     sources_config: dict[str, Any],
     notifier: PipelineNotifier | None = None,
+    *,
+    started_at: datetime | None = None,
 ) -> dict[str, Any]:
     """데이터 수집 실행"""
     print("\n=== 데이터 수집 시작 ===")
     start_time = time.time()
+    moment = started_at or datetime.now(tz=UTC)
+    run_date = run_calendar_day(moment)
 
     db_path = config["database"]["path"]
     store = GraphStore(db_path)
-    raw_logger = RawLogger(Path("data/raw"))
+    raw_logger = RawLogger(Path("data/raw"), now=moment)
     search_index = SearchIndex(Path(os.getenv("PRICERADAR_SEARCH_DB_PATH", "data/search_index.db")))
 
     total_items_collected = 0
@@ -99,8 +103,8 @@ def run_collection(
     source_counts: dict[str, int] = {}
     sources = sources_config.get("sources", [])
 
-    # 같은 날 이미 저장된 URL은 insert 전에 건너뛴다.
-    seen_urls = store.urls_collected_on(datetime.now(UTC).date())
+    # 같은 KST 날짜에 이미 저장된 URL은 insert 전에 건너뛴다.
+    seen_urls = store.urls_collected_on(run_date)
 
     for source in sources:
         if not source.get("enabled", False):
@@ -431,6 +435,8 @@ def generate_report(
     config: dict[str, Any],
     output_dir: str | None = None,
     quality_report: dict[str, Any] | None = None,
+    *,
+    report_date: date | None = None,
 ) -> None:
     """HTML 리포트 생성"""
     print("\n=== 리포트 생성 시작 ===")
@@ -449,8 +455,9 @@ def generate_report(
         output_dir = str(config.get("reporting", {}).get("output_path", "reports"))
 
     os.makedirs(output_dir, exist_ok=True)
-    report_date = daily_partition_date().strftime("%Y%m%d")
-    report_path = os.path.join(output_dir, f"price_{report_date}.html")
+    dated = report_date or run_calendar_day()
+    report_stamp = dated.strftime("%Y%m%d")
+    report_path = os.path.join(output_dir, f"price_{report_stamp}.html")
 
     articles: list[Article] = []
     for deal in deals:
@@ -519,14 +526,19 @@ def run_once(
     keep_raw_days: int = 180,
     keep_report_days: int = 90,
     keep_snapshot_days: int = 30,
+    *,
+    started_at: datetime | None = None,
 ) -> None:
     """1회 실행"""
     print("\n" + "=" * 60)
-    print(f"PriceRadar 실행 시작: {datetime.now(tz=UTC).strftime('%Y-%m-%d %H:%M:%S')}")
+    moment = started_at or datetime.now(tz=UTC)
+    run_date = run_calendar_day(moment)
+    print(f"PriceRadar 실행 시작: {moment.strftime('%Y-%m-%d %H:%M:%S')} UTC")
+    print(f"수집 기준일(KST): {run_date.isoformat()}")
     print("=" * 60)
 
     # 1. 데이터 수집
-    run_collection(config, sources_config, notifier)
+    run_collection(config, sources_config, notifier, started_at=moment)
 
     # 2. 스코어링
     run_scoring(config)
@@ -535,7 +547,7 @@ def run_once(
     quality_report: dict[str, Any] | None = None
     try:
         report_dir = Path(config.get("reporting", {}).get("output_path", "reports"))
-        target_date = daily_partition_date()
+        target_date = run_date
         max_items = config.get("reporting", {}).get("max_items_per_report", 100)
         db_path = config["database"]["path"]
         quality_store = GraphStore(db_path)
@@ -559,7 +571,7 @@ def run_once(
 
     # 4. 리포트 생성 (옵션)
     if generate_report_flag:
-        generate_report(config, quality_report=quality_report)
+        generate_report(config, quality_report=quality_report, report_date=run_date)
 
     # 5. Apply date storage policy
     try:
@@ -572,6 +584,7 @@ def run_once(
             keep_report_days=keep_report_days,
             keep_snapshot_days=keep_snapshot_days,
             snapshot_db=snapshot_db,
+            today=run_date,
         )
         snapshot_path = date_storage.get("snapshot_path")
         if isinstance(snapshot_path, str) and snapshot_path:

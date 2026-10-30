@@ -171,19 +171,22 @@ def apply_date_storage_policy(
     snapshot_db: bool,
     keep_snapshot_days: int = 30,
     max_bytes: int | None = None,
+    today: date | None = None,
 ) -> dict[str, object]:
     # Drop redundant scores before compaction. Compaction leaves a database
     # untouched when it is already under the byte budget, and it will not
     # delete history whose newest row is older than the age window.
+    run_day = today or daily_partition_date()
     prepared = _prepare_price_database(database_path)
     # Compact next so the snapshot is a copy of the file that will be committed.
     compact = _compact_database(database_path, max_bytes=max_bytes)
-    snapshot_path = snapshot_database(database_path) if snapshot_db else None
-    raw_removed = cleanup_date_directories(raw_data_dir, keep_days=keep_raw_days)
-    report_removed = cleanup_dated_reports(report_dir, keep_days=keep_report_days)
+    snapshot_path = snapshot_database(database_path, snapshot_date=run_day) if snapshot_db else None
+    raw_removed = cleanup_date_directories(raw_data_dir, keep_days=keep_raw_days, today=run_day)
+    report_removed = cleanup_dated_reports(report_dir, keep_days=keep_report_days, today=run_day)
     snapshots_removed = cleanup_snapshots(
         database_path.parent / "snapshots",
         keep_days=keep_snapshot_days,
+        today=run_day,
     )
     return {
         "snapshot_path": str(snapshot_path) if snapshot_path is not None else None,
