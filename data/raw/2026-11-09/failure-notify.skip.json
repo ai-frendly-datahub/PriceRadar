@@ -1,0 +1,7 @@
+{
+  "source": "failure-notify",
+  "required_env": [
+    "NOTIFICATION_WEBHOOK_URL"
+  ],
+  "skipped_at": "2026-11-08T15:43:20.340350+00:00"
+}
